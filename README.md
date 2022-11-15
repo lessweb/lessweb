@@ -10,25 +10,20 @@ pip3 install lessweb
 
 ## Hello World!
 ```python
-import lessweb
-def hello():
-    return 'Hello, world!'
+from lessweb import Bridge, get_mapping
 
-app = lessweb.Application()
-app.add_get_mapping('/', hello)
-app.run()
+@get_mapping('/')
+async def hello():
+    return {'message': 'Hello, world!'}
+
+def main():
+    bridge = Bridge()
+    bridge.add_route(hello)
+    bridge.run_app()
+
+if __name__ == '__main__':
+    main()
 ```
 
-## 文档：
+## Cookbook：
 ### http://www.lessweb.cn
-
-## 本地测试步骤：
-```bash
-virtualenv venv
-. venv/bin/activate
-bash pre_test.sh
-nosetests -s tests/fast_test.py
-nosetests -s tests/slow_test.py
-nosetests -s tests/final_test.py
-
-```
