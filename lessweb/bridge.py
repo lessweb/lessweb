@@ -326,19 +326,14 @@ class Bridge:
         while dfs:
             prefix, data = dfs.pop()
             assert isinstance(data, dict), f'config{prefix} must be dict!'
-            for key, value in data.items():
+            for key, value in list(data.items()):
                 key_path = f'{prefix}.{key}'
                 if isinstance(value, dict):
                     dfs.append((key_path, value))
-                elif isinstance(value, str):
-                    env_key = make_environ_key(key_path)
-                    if env_key in environ:
-                        data[prefix] = environ[env_key]
                 else:
-                    value_type = type(value)
                     env_key = make_environ_key(key_path)
                     if env_key in environ:
-                        data[prefix] = value_type(orjson.loads(environ[env_key]))
+                        data[key] = environ[env_key]
         return config
 
     def _load_logger(self):
@@ -404,5 +399,5 @@ class Bridge:
                         self.add_route(item)
 
     def run_app(self, **kwargs):
-        port = self.app['config']['bootstrap'].get('port', 8080)
+        port = int(self.app['config']['bootstrap'].get('port', 8080))
         run_app(app=self.app, port=port, **kwargs)
