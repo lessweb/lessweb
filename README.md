@@ -40,7 +40,7 @@ Start the application with the command below, it listens on `http://localhost:80
 python3 index.py
 ```
 
-# Setting port
+## Setting port
 
 Save the code below in file `config.toml`:
 
