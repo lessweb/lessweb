@@ -27,6 +27,9 @@ setup(
             ],
         keywords='lessweb web web.py aiohttp',
         packages = ['lessweb',],
+        package_data={
+            'lessweb': ['py.typed'],
+        },
         install_requires=['aiohttp', 'toml', 'orjson', 'lesscli', 'typing_inspect'],
         entry_points={
             'console_scripts': [
