@@ -1,7 +1,7 @@
 import datetime
 import enum
 import inspect
-from typing import Any, Union, get_type_hints, List
+from typing import Any, Union, get_type_hints, List, Type, Dict
 import typing_inspect
 import csv
 import json
@@ -14,7 +14,7 @@ class JSONDecodeError(Exception):
 NoneType = type(None)
 
 
-classname_dict = {}
+classname_dict: Dict[str, Type] = {}
 
 
 def parse_csv(csv_text):
@@ -35,8 +35,21 @@ def isinstance_safe(x, tp_tuple) -> bool:
         return False
 
 
+def future_typed_dict_keys(tp):
+    """
+    由于typing_inspect.typed_dict_keys()在alpine上有bug，只能自实现代替版本
+    """
+    try:
+        if issubclass(tp, dict):
+            return tp.__annotations__.copy()
+        else:
+            return None
+    except:
+        return None
+
+
 def is_typeddict(tp) -> bool:
-    return issubclass_safe(tp, dict) and typing_inspect.typed_dict_keys(tp)
+    return issubclass_safe(tp, dict) and future_typed_dict_keys(tp)
 
 
 def inspect_type(tp):
@@ -98,9 +111,9 @@ def typecast(data, tp):
             data = json.loads(data)
             return typecast(data, tp)
     else:
-        type_inspect_egg = inspect_type(tp)
-        if isinstance(type_inspect_egg, tuple):
-            origin_type, type_args = type_inspect_egg
+        type_inspect_seed = inspect_type(tp)
+        if isinstance(type_inspect_seed, tuple):
+            origin_type, type_args = type_inspect_seed
             if origin_type is list:
                 assert isinstance(data, list)
                 return [typecast(item, type_args) for item in data]
@@ -120,13 +133,18 @@ def typecast(data, tp):
                 else:
                     required_keys = getattr(tp, '__required_keys__', set())
                 missing_keys = required_keys - set(data.keys())
-                if missing_keys:
-                    raise JSONDecodeError(f'missing required keys ({missing_keys=})')
+                none_value_keys = set()
                 result = {}
                 for item_key, item_value in data.items():
                     if item_key not in type_args:
                         raise JSONDecodeError(f'{item_key=} is not member of {tp=}')
                     result[item_key] = typecast(item_value, type_args[item_key])
+                for item_key in missing_keys:
+                    if typing_inspect.is_optional_type(type_args[item_key]):
+                        result[item_key] = None
+                        none_value_keys.add(item_key)
+                if missing_keys - none_value_keys:
+                    raise JSONDecodeError(f'missing required keys {list(missing_keys - none_value_keys)}')
                 return result
             else:
                 raise JSONDecodeError(f'type {tp=} is not supported ({data=})')

@@ -10,7 +10,7 @@ from os import environ, listdir
 import re
 import sys
 import toml
-from typing import Union, Type, TypeVar, Any, Optional
+from typing import Union, Type, TypeVar, Any, Optional, Dict
 from .typecast import typecast, isinstance_safe, is_typeddict
 
 T = TypeVar('T')
@@ -143,7 +143,7 @@ def autowire(ctx: Union[Application, Request], cls: Type[T], name: str = None) -
         return ctx[ref]
     elif isinstance(ctx, Request) and ref in ctx.config_dict:
         return ctx.config_dict[ref]
-    logging.info('autowire-> %s %s', ctx, cls)
+    logging.debug('autowire-> %s %s', ctx, cls)
     if isinstance_safe(ctx, cls):
         return ctx
     elif isinstance(ctx, Request) and cls is Application:
@@ -172,7 +172,7 @@ def make_middleware(sp_middleware):
 
     @middleware
     async def aio_middleware(request, handler):
-        logging.info('middleware-> %s', request)
+        logging.debug('middleware-> %s', request)
         args, kwargs = [], {}
         for name, (depends_type, _, kind) in func_arg_spec(sp_middleware).items():
             if name == 'handler':
@@ -209,7 +209,8 @@ def make_router(sp_endpoint):
 
     async def aio_endpoint(request: Request):
         assert inspect.iscoroutinefunction(sp_endpoint), f'{sp_endpoint} must be coroutine function'
-        args, kwargs = [], {}
+        args = []
+        kwargs: Dict[str, Any] = {}
         for name, (depends_type, default, kind) in func_arg_spec(sp_endpoint).items():
             if kind == POSITIONAL_ONLY:
                 try:
