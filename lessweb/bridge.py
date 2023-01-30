@@ -198,6 +198,29 @@ def make_app_signal(sp_handler):
     return aio_handler
 
 
+def getdoc(obj) -> str:
+    """
+    获得模块或对象的docstring
+    实现了递归包含，只需要以「:include 」开头
+    """
+    if isinstance(obj, str):
+        try:
+            module_or_object = importlib.import_module(obj)
+        except ModuleNotFoundError:
+            module_name, object_name = obj.rsplit('.', 1)
+            module_or_object = getattr(importlib.import_module(module_name), object_name)
+        return getdoc(module_or_object)
+    result = []
+    docstring = inspect.getdoc(obj) or ''
+    for line in docstring.splitlines():
+        if line.strip().startswith(':include '):
+            include_doc = getdoc(line.replace(':include ', '').strip())
+            result.append(include_doc)
+        else:
+            result.append(line)
+    return '\n'.join(result) + '\n'
+
+
 def make_router(sp_endpoint):
     """
     :param sp_endpoint:
@@ -251,10 +274,20 @@ class Route:
     handler: Any
 
 
+def rest_mapping(method: str, path: str):
+    def g(sp_endpoint) -> Route:
+        handler = make_router(sp_endpoint)
+        route = Route(method=method.upper(), path=path, handler=handler)
+        route.__doc__ = inspect.getdoc(sp_endpoint)
+        return route
+
+    return g
+
+
 def get_mapping(path: str):
     def g(sp_endpoint) -> Route:
         handler = make_router(sp_endpoint)
-        return Route(method='GET', path=path, handler=handler)
+        return rest_mapping(method='GET', path=path)(sp_endpoint)
 
     return g
 
@@ -262,39 +295,28 @@ def get_mapping(path: str):
 def post_mapping(path: str):
     def g(sp_endpoint) -> Route:
         handler = make_router(sp_endpoint)
-        return Route(method='POST', path=path, handler=handler)
+        return rest_mapping(method='POST', path=path)(sp_endpoint)
 
     return g
 
 
 def put_mapping(path: str):
     def g(sp_endpoint) -> Route:
-        handler = make_router(sp_endpoint)
-        return Route(method='PUT', path=path, handler=handler)
+        return rest_mapping(method='PUT', path=path)(sp_endpoint)
 
     return g
 
 
 def patch_mapping(path: str):
     def g(sp_endpoint) -> Route:
-        handler = make_router(sp_endpoint)
-        return Route(method='PATCH', path=path, handler=handler)
+        return rest_mapping(method='PATCH', path=path)(sp_endpoint)
 
     return g
 
 
 def delete_mapping(path: str):
     def g(sp_endpoint) -> Route:
-        handler = make_router(sp_endpoint)
-        return Route(method='DELETE', path=path, handler=handler)
-
-    return g
-
-
-def rest_mapping(method: str, path: str):
-    def g(sp_endpoint) -> Route:
-        handler = make_router(sp_endpoint)
-        return Route(method=method.upper(), path=path, handler=handler)
+        return rest_mapping(method='DELETE', path=path)(sp_endpoint)
 
     return g
 
