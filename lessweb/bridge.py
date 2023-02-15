@@ -148,7 +148,7 @@ def autowire(ctx: Union[Application, Request], cls: Type[T], name: str = None) -
         return ctx
     elif isinstance(ctx, Request) and cls is Application:
         return ctx.app
-    elif not getattr(cls, '__lessweb_service__'):
+    elif not hasattr(cls, '__lessweb_service__'):
         raise TypeError(f'cannot autowire ({ref}) {ctx=} {cls=})')
     depends_on = get_depends_on(cls.__init__)
     args: list = []
