@@ -270,16 +270,14 @@ def make_router(sp_endpoint):
 @dataclass
 class Route:
     method: str
-    path: str
-    paths: Optional[list]
+    paths: list
     handler: Any
 
 
-def rest_mapping(method: str, path: str, paths: list=None):
+def rest_mapping(method: str, paths: list):
     def g(sp_endpoint) -> Route:
         handler = make_router(sp_endpoint)
-        assert bool(path) ^ bool(paths), 'Only one of path and paths must be non-empty value.'
-        route = Route(method=method.upper(), path=path, paths=paths, handler=handler)
+        route = Route(method=method.upper(), paths=paths, handler=handler)
         route.__doc__ = inspect.getdoc(sp_endpoint)
         return route
 
@@ -289,7 +287,7 @@ def rest_mapping(method: str, path: str, paths: list=None):
 def get_mapping(path: str):
     def g(sp_endpoint) -> Route:
         handler = make_router(sp_endpoint)
-        return rest_mapping(method='GET', path=path)(sp_endpoint)
+        return rest_mapping(method='GET', paths=[path])(sp_endpoint)
 
     return g
 
@@ -297,28 +295,28 @@ def get_mapping(path: str):
 def post_mapping(path: str):
     def g(sp_endpoint) -> Route:
         handler = make_router(sp_endpoint)
-        return rest_mapping(method='POST', path=path)(sp_endpoint)
+        return rest_mapping(method='POST', paths=[path])(sp_endpoint)
 
     return g
 
 
 def put_mapping(path: str):
     def g(sp_endpoint) -> Route:
-        return rest_mapping(method='PUT', path=path)(sp_endpoint)
+        return rest_mapping(method='PUT', paths=[path])(sp_endpoint)
 
     return g
 
 
 def patch_mapping(path: str):
     def g(sp_endpoint) -> Route:
-        return rest_mapping(method='PATCH', path=path)(sp_endpoint)
+        return rest_mapping(method='PATCH', paths=[path])(sp_endpoint)
 
     return g
 
 
 def delete_mapping(path: str):
     def g(sp_endpoint) -> Route:
-        return rest_mapping(method='DELETE', path=path)(sp_endpoint)
+        return rest_mapping(method='DELETE', paths=[path])(sp_endpoint)
 
     return g
 
@@ -412,11 +410,8 @@ class Bridge:
         self.app.on_shutdown.append(make_app_signal(handler))
 
     def add_route(self, route):
-        if route.paths:
-            for path in route.paths:
-                self.app.router.add_route(method=route.method, path=path, handler=route.handler)
-        else:
-            self.app.router.add_route(method=route.method, path=route.path, handler=route.handler)
+        for path in route.paths:
+            self.app.router.add_route(method=route.method, path=path, handler=route.handler)
 
     def add_route_scan(self, endpoint_package: str):
         endpoint_mdl = importlib.import_module(endpoint_package)
