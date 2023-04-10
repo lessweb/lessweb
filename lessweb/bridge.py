@@ -1,4 +1,4 @@
-from aiohttp.web import Request, Application, Response, middleware, HTTPBadRequest, HTTPError, Type, run_app
+from aiohttp.web import Request, Application, Response, middleware, HTTPBadRequest, HTTPError, run_app
 from aiohttp.typedefs import LooseHeaders
 from dataclasses import dataclass
 import importlib
@@ -271,13 +271,15 @@ def make_router(sp_endpoint):
 class Route:
     method: str
     path: str
+    paths: Optional[list]
     handler: Any
 
 
-def rest_mapping(method: str, path: str):
+def rest_mapping(method: str, path: str, paths: list=None):
     def g(sp_endpoint) -> Route:
         handler = make_router(sp_endpoint)
-        route = Route(method=method.upper(), path=path, handler=handler)
+        assert bool(path) ^ bool(paths), 'Only one of path and paths must be non-empty value.'
+        route = Route(method=method.upper(), path=path, paths=paths, handler=handler)
         route.__doc__ = inspect.getdoc(sp_endpoint)
         return route
 
@@ -410,7 +412,11 @@ class Bridge:
         self.app.on_shutdown.append(make_app_signal(handler))
 
     def add_route(self, route):
-        self.app.router.add_route(method=route.method, path=route.path, handler=route.handler)
+        if route.paths:
+            for path in route.paths:
+                self.app.router.add_route(method=route.method, path=path, handler=route.handler)
+        else:
+            self.app.router.add_route(method=route.method, path=route.path, handler=route.handler)
 
     def add_route_scan(self, endpoint_package: str):
         endpoint_mdl = importlib.import_module(endpoint_package)
