@@ -1,5 +1,3 @@
-__version__ = '1.0.7'
-
 from .bridge import Bridge, \
     get_mapping, \
     post_mapping, \

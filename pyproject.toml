@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lessweb"
+version = "1.0.8"
+description = 'A pythonic web framework'
+readme = "README.md"
+requires-python = ">=3.7"
+keywords = ['lessweb', 'web', 'web.py', 'aiohttp']
+authors = [
+    {name = "qorzj", email = "goodhorsezxj@gmail.com"},
+]
+license = {text = "Apache 2"}
+dependencies = [
+    "aiohttp",
+    "toml",
+    "orjson",
+    "lesscli",
+    "typing_inspect",
+]
+
+[tool.setuptools.package-data]
+"lessweb" = ["py.typed"]

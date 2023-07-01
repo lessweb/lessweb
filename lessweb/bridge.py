@@ -1,6 +1,6 @@
 from aiohttp.web import Request, Application, Response, middleware, HTTPBadRequest, HTTPError, run_app
 from aiohttp.typedefs import LooseHeaders
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 import importlib
 import inspect
 import logging
@@ -259,7 +259,7 @@ def make_router(sp_endpoint):
             else:
                 kwargs[name] = autowire(request, depends_type, name)
         result = await sp_endpoint(*args, **kwargs)
-        if isinstance(result, (dict, list)):
+        if isinstance(result, (dict, list)) or is_dataclass(result):
             return rest_response(result)
         else:
             return result
