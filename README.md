@@ -70,5 +70,8 @@ Lessweb is offered under the Apache 2 license.
 
 The latest developer version is available in a GitHub repository: https://github.com/lessweb/lessweb
 
+## Cookbook
+### https://github.com/lessweb/lessweb/wiki
+
 ## Cookbook【中文】：
 ### http://www.lessweb.cn
