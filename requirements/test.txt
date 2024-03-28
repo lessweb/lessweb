@@ -1,0 +1,7 @@
+-r base.txt
+mypy
+coverage
+pytest
+pytest-cov
+pytest-mock
+types-toml

@@ -90,5 +90,6 @@ ENV/
 
 .idea
 .DS_Store
+.vscode
 .mypy_cache
 __target__/

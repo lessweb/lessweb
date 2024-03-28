@@ -1,17 +1,20 @@
-from aiohttp.web import Request, Application, Response, middleware, HTTPBadRequest, HTTPError, run_app
-from aiohttp.typedefs import LooseHeaders
-from dataclasses import dataclass, is_dataclass
 import importlib
 import inspect
 import logging
-from logging.handlers import TimedRotatingFileHandler
-import orjson
-from os import environ, listdir
 import re
 import sys
+from dataclasses import dataclass, is_dataclass
+from logging.handlers import TimedRotatingFileHandler
+from os import environ, listdir
+from typing import Any, Dict, Optional, Type, TypeVar, Union
+
+import orjson
 import toml
-from typing import Union, Type, TypeVar, Any, Optional, Dict
-from .typecast import typecast, isinstance_safe, is_typeddict
+from aiohttp.typedefs import LooseHeaders
+from aiohttp.web import (Application, HTTPBadRequest, HTTPError, Request,
+                         Response, middleware, run_app)
+
+from .typecast import is_typeddict, isinstance_safe, typecast
 
 T = TypeVar('T')
 ORJSON_OPTION = 0
@@ -81,8 +84,8 @@ def rest_response(
         data,
         *,
         status: int = 200,
-        reason: str = None,
-        headers: LooseHeaders = None,
+        reason: Optional[str] = None,
+        headers: Optional[LooseHeaders] = None,
 ) -> Response:
     resp = Response(
         body=orjson.dumps(data, option=ORJSON_OPTION),
@@ -99,7 +102,7 @@ def rest_error(
         error: Type[HTTPError],
         data,
         *,
-        headers: LooseHeaders = None,
+        headers: Optional[LooseHeaders] = None,
         **kwargs,
 ) -> HTTPError:
     return error(
@@ -115,7 +118,7 @@ def service(f: T) -> T:
     return f
 
 
-def autowire(ctx: Union[Application, Request], cls: Type[T], name: str = None) -> T:
+def autowire(ctx: Union[Application, Request], cls: Type[T], name: Optional[str] = None) -> T:
     """
     依赖注入。
     通过注入完成后，调用__init__实例化。后续直接使用实例化结果。
@@ -123,7 +126,7 @@ def autowire(ctx: Union[Application, Request], cls: Type[T], name: str = None) -
     特别地，依赖Application和Request不需要加载模块。
     """
     ref = absolute_ref(cls)
-    app_ctx = ctx.app if isinstance_safe(ctx, Request) else ctx
+    app_ctx = ctx.app if isinstance(ctx, Request) else ctx
     assert ref != 'config', f'Cannot inject {cls} since `config` is reserved word!'
     if name:  # try to inject by name
         if name == 'config' and is_typeddict(cls):
@@ -145,9 +148,9 @@ def autowire(ctx: Union[Application, Request], cls: Type[T], name: str = None) -
         return ctx.config_dict[ref]
     logging.debug('autowire-> %s %s', ctx, cls)
     if isinstance_safe(ctx, cls):
-        return ctx
+        return ctx  # type: ignore
     elif isinstance(ctx, Request) and cls is Application:
-        return ctx.app
+        return ctx.app  # type: ignore
     elif not hasattr(cls, '__lessweb_service__'):
         raise TypeError(f'cannot autowire ({ref}) {ctx=} {cls=})')
     depends_on = get_depends_on(cls.__init__)
@@ -190,10 +193,10 @@ def make_app_signal(sp_handler):
     """
 
     async def aio_handler(app):
-        args, kwargs = [], {}
+        kwargs = {}
         for name, (depends_type, _, kind) in func_arg_spec(sp_handler).items():
             kwargs[name] = autowire(app, depends_type, name)
-        return await sp_handler(*args, **kwargs)
+        return await sp_handler(**kwargs)
 
     return aio_handler
 
@@ -208,7 +211,8 @@ def getdoc(obj) -> str:
             module_or_object = importlib.import_module(obj)
         except ModuleNotFoundError:
             module_name, object_name = obj.rsplit('.', 1)
-            module_or_object = getattr(importlib.import_module(module_name), object_name)
+            module_or_object = getattr(
+                importlib.import_module(module_name), object_name)
         return getdoc(module_or_object)
     result = []
     docstring = inspect.getdoc(obj) or ''
@@ -231,7 +235,8 @@ def make_router(sp_endpoint):
     """
 
     async def aio_endpoint(request: Request):
-        assert inspect.iscoroutinefunction(sp_endpoint), f'{sp_endpoint} must be coroutine function'
+        assert inspect.iscoroutinefunction(
+            sp_endpoint), f'{sp_endpoint} must be coroutine function'
         args = []
         kwargs: Dict[str, Any] = {}
         for name, (depends_type, default, kind) in func_arg_spec(sp_endpoint).items():
@@ -239,23 +244,28 @@ def make_router(sp_endpoint):
                 try:
                     data = orjson.loads(await request.text())
                 except orjson.JSONDecodeError:
-                    raise HTTPBadRequest(text=f'BadRequest: request body raise JSONDecodeError')
+                    raise HTTPBadRequest(
+                        text=f'BadRequest: request body raise JSONDecodeError')
                 try:
                     args.append(typecast(data, depends_type))
                 except Exception as e:
-                    raise HTTPBadRequest(text=f'BadRequest: request body decoding error: {e}')
+                    raise HTTPBadRequest(
+                        text=f'BadRequest: request body decoding error: {e}')
             elif kind == KEYWORD_ONLY:
-                chosen_value = request.match_info[name] if name in request.match_info else request.query.get(name)
+                chosen_value = request.match_info[name] if name in request.match_info else request.query.get(
+                    name)
                 if chosen_value is None:
                     if default is not None:
-                        raise HTTPBadRequest(text=f'BadRequest: missing required parameter: {name}')
+                        raise HTTPBadRequest(
+                            text=f'BadRequest: missing required parameter: {name}')
                     else:
                         kwargs[name] = None
                 else:
                     try:
                         kwargs[name] = typecast(chosen_value, depends_type)
                     except Exception:
-                        raise HTTPBadRequest(text=f'BadRequest: invalid parameter: {name}')
+                        raise HTTPBadRequest(
+                            text=f'BadRequest: invalid parameter: {name}')
             else:
                 kwargs[name] = autowire(request, depends_type, name)
         result = await sp_endpoint(*args, **kwargs)
@@ -325,7 +335,7 @@ class Bridge:
     app: Application
     config: Optional[str]
 
-    def __init__(self, config: str = None, app: Application = None):
+    def __init__(self, config: Optional[str] = None, app: Optional[Application] = None):
         if app is None:
             self.app = Application()
         else:
@@ -387,7 +397,8 @@ class Bridge:
             logger.addHandler(stream_handler)
 
     def _load_orjson(self):
-        init_orjson_option(self.app['config']['bootstrap'].get('orjson_option', ''))
+        init_orjson_option(self.app['config']
+                           ['bootstrap'].get('orjson_option', ''))
 
     def add_middleware(self, handler):
         self.app.middlewares.append(make_middleware(handler))
@@ -411,13 +422,17 @@ class Bridge:
 
     def add_route(self, route):
         for path in route.paths:
-            self.app.router.add_route(method=route.method, path=path, handler=route.handler)
+            self.app.router.add_route(
+                method=route.method, path=path, handler=route.handler)
 
     def add_route_scan(self, endpoint_package: str):
         endpoint_mdl = importlib.import_module(endpoint_package)
+        if endpoint_mdl.__spec__ is None or not endpoint_mdl.__spec__.submodule_search_locations:
+            raise ImportError(f'{endpoint_package} is an empty package')
         for filename in listdir(endpoint_mdl.__spec__.submodule_search_locations[0]):
             if filename.endswith('.py'):
-                sub_mdl = importlib.import_module(f'{endpoint_package}.{filename[:-3]}')
+                sub_mdl = importlib.import_module(
+                    f'{endpoint_package}.{filename[:-3]}')
                 for item in sub_mdl.__dict__.values():
                     if isinstance(item, Route):
                         self.add_route(item)
