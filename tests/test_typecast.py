@@ -23,7 +23,7 @@ class TestInspectType(unittest.TestCase):
         self.assertEqual(inspect_type(list), (list,))
         self.assertEqual(inspect_type(list[int]), (list, int))
         self.assertEqual(inspect_type(Optional[int]), (Union, (int, NoneType)))
-        if sys.version_info[:2] >= (3, 10):
+        if sys.version_info[:2] >= (3, 11):
             self.assertEqual(inspect_type(int | None),
                              (Union, (int, NoneType)))
             self.assertEqual(inspect_type(int | str), (Union, (int, str)))

@@ -4,6 +4,7 @@ import enum
 import inspect
 import json
 import re
+import sys
 from typing import Any, Dict, List, Literal, Type, Union, get_type_hints
 
 import typing_inspect
@@ -188,19 +189,20 @@ def echo_typing_inspect():
     list_int_origin = typing_inspect.get_origin(list[int])
     print(f'{list_int_args=}')  # list_int_args=(<class 'int'>,)
     print(f'{list_int_origin=}')  # list_int_origin=<class 'list'>
-    int_optional_args = typing_inspect.get_args(int | None)
-    int_optional_origin = typing_inspect.get_origin(int | None)
-    is_optional = typing_inspect.is_optional_type(int | None)
-    # int_optional_args=(<class 'int'>, <class 'NoneType'>)
-    print(f'{int_optional_args=}')
-    print(f'{int_optional_origin=}')  # int_optional_origin=None
-    print(f'{is_optional=}')  # is_optional=True
+    if sys.version_info[:2] >= (3, 11):
+        int_optional_args = typing_inspect.get_args(int | None)
+        int_optional_origin = typing_inspect.get_origin(int | None)
+        is_optional = typing_inspect.is_optional_type(int | None)
+        # int_optional_args=(<class 'int'>, <class 'NoneType'>)
+        print(f'{int_optional_args=}')
+        print(f'{int_optional_origin=}')  # int_optional_origin=None
+        print(f'{is_optional=}')  # is_optional=True
 
-    union_optional_args = typing_inspect.get_args(int | str)
-    union_optional_origin = typing_inspect.get_origin(int | str)
-    # union_optional_args=(<class 'int'>, <class 'str'>)
-    print(f'{union_optional_args=}')
-    print(f'{union_optional_origin=}')  # union_optional_origin=None
+        union_optional_args = typing_inspect.get_args(int | str)
+        union_optional_origin = typing_inspect.get_origin(int | str)
+        # union_optional_args=(<class 'int'>, <class 'str'>)
+        print(f'{union_optional_args=}')
+        print(f'{union_optional_origin=}')  # union_optional_origin=None
 
     union_optional_args = typing_inspect.get_args(Union[int, str])
     union_optional_origin = typing_inspect.get_origin(Union[int, str])
