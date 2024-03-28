@@ -2,10 +2,11 @@ import sys
 import unittest
 from datetime import date, datetime, time
 from enum import Enum
-from types import NoneType
 from typing import Dict, Generator, List, Literal, Optional, TypedDict, Union
 
 from lessweb.typecast import TypeCastError, inspect_type, typecast
+
+NoneType = type(None)
 
 
 class SampleTypedDict(TypedDict):
