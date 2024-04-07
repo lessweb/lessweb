@@ -5,7 +5,8 @@ import inspect
 import json
 import re
 import sys
-from typing import Any, Dict, List, Literal, Type, Union, get_type_hints
+from typing import (Any, Dict, List, Literal, NewType, Type, Union,
+                    get_type_hints)
 
 import typing_inspect
 
@@ -64,6 +65,7 @@ def inspect_type(tp):
     inspect_type(int | str) => (Union, (int, str))
     inspect_type(int | str | None) => (Union, (int, str, NoneType))
     inspect_type(Literal['a', 'b']) => (Literal, ('a', 'b'))
+    inspect_type(NewType) => (NewType, __supertype__)
     inspect_type(dict) => (dict,)
     inspect_type(dict[str, int]) => NotImplementedError
     inspect_type(typeddict) => (dict, __annotations__)
@@ -78,12 +80,14 @@ def inspect_type(tp):
         if is_typeddict(tp):
             classname_dict[tp.__qualname__] = tp
             return dict, get_type_hints(tp)
+        elif hasattr(tp, '__supertype__'):
+            return NewType, tp.__supertype__
         return (tp,)
-    if tp_origin is list:
+    elif tp_origin is list:
         return list, tp_args[0]
-    if (tp_origin is None or tp_origin == Union) and tp_args:
+    elif (tp_origin is None or tp_origin == Union) and tp_args:
         return Union, tp_args
-    if tp_origin == Literal and tp_args:
+    elif tp_origin == Literal and tp_args:
         return Literal, tp_args
     raise NotImplementedError(f'cannot inspect type {tp=}')
 
@@ -100,13 +104,24 @@ def typecast(data, tp):
         else:
             tp = classname_dict[tp]
     type_inspect_seed = inspect_type(tp)
-    if type_inspect_seed[0] == Literal:
+    if type_inspect_seed[0] == Union:
+        if len(type_inspect_seed) != 2 or not type_inspect_seed[1]:
+            raise TypeCastError(f'{tp=} is empty')  # 5xx Error in fact
+        for item in type_inspect_seed[1]:
+            try:
+                return typecast(data, item)
+            except:
+                continue
+        raise TypeCastError(f'{data=} is not any member of {tp=}')
+    elif type_inspect_seed[0] == Literal:
         if len(type_inspect_seed) != 2 or not type_inspect_seed[1]:
             raise TypeCastError(f'{tp=} is empty')  # 5xx Error in fact
         for item in type_inspect_seed[1]:
             if item == data:
                 return data
         raise TypeCastError(f'{data=} is not member of {tp=}')
+    elif type_inspect_seed[0] == NewType:
+        return typecast(data, type_inspect_seed[1])
     if isinstance_safe(data, tp):
         return data
     elif issubclass_safe(tp, enum.Enum):
@@ -125,12 +140,13 @@ def typecast(data, tp):
             return typecast(data, tp)
         else:
             try:
-                data = json.loads(data)
-                return typecast(data, tp)
+                loaded_data = json.loads(data)
             except:
                 if re.match(r'^\w*$', data):
                     raise TypeCastError(f'{data=} is not an instance of {tp=}')
-                raise
+                else:
+                    raise
+            return typecast(loaded_data, tp)
     else:
         if len(type_inspect_seed) != 2:
             raise TypeCastError(f'{data=} is not instance of {tp=}')
@@ -214,6 +230,14 @@ def echo_typing_inspect():
     literal_origin = typing_inspect.get_origin(Literal['a', 'b'])
     print(f'{literral_args=}')  # literral_args=('a', 'b')
     print(f'{literal_origin=}')  # literal_origin=typing.Literal
+
+    UserId = NewType('UserId', int)
+    newtype_args = typing_inspect.get_args(UserId)
+    newtype_origin = typing_inspect.get_origin(UserId)
+    print(f'{newtype_args=}')  # newtype_args=()
+    print(f'{newtype_origin=}')  # newtype_origin=None
+    # newtype.__supertype__=<class 'int'>
+    print(f'newtype.__supertype__={UserId.__supertype__}')  # type: ignore
 
     class Pet(typing.TypedDict):
         name: str

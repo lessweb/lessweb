@@ -2,7 +2,8 @@ import sys
 import unittest
 from datetime import date, datetime, time
 from enum import Enum
-from typing import Dict, Generator, List, Literal, Optional, TypedDict, Union
+from typing import (Dict, Generator, List, Literal, NewType, Optional,
+                    TypedDict, Union)
 
 from lessweb.typecast import TypeCastError, inspect_type, typecast
 
@@ -16,6 +17,9 @@ class SampleTypedDict(TypedDict):
 
 class SampleElse:
     pass
+
+
+UserId = NewType('UserId', int)
 
 
 class TestInspectType(unittest.TestCase):
@@ -32,6 +36,7 @@ class TestInspectType(unittest.TestCase):
                              (Union, (int, str, NoneType)))
         self.assertEqual(inspect_type(
             Literal['a', 'b']), (Literal, ('a', 'b')))
+        self.assertEqual(inspect_type(UserId), (NewType, int))
         self.assertEqual(inspect_type(dict), (dict,))
         self.assertRaises(NotImplementedError, inspect_type, dict[str, int])
         self.assertRaises(NotImplementedError, inspect_type,
@@ -119,6 +124,27 @@ class TestTypecast(unittest.TestCase):
             self.fail('should raise TypeCastError')
         except TypeCastError as e:
             self.assertEqual(str(e), f'{tp=} is empty')
+
+    def test_typecast_union(self):
+        data = "10"
+        tp = Union[int, list[int]]
+        result = typecast(data, tp)
+        self.assertEqual(result, 10)
+        data = "11,12"
+        result = typecast(data, tp)
+        self.assertEqual(result, [11, 12])
+        data = "12.3"
+        with self.assertRaises(TypeCastError):
+            typecast(data, tp)
+
+    def test_typecast_newtype(self):
+        data = "10"
+        tp = UserId
+        result = typecast(data, tp)
+        self.assertEqual(result, UserId(10))
+        data = "12.3"
+        with self.assertRaises(TypeCastError):
+            typecast(data, tp)
 
 
 if __name__ == '__main__':
