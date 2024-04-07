@@ -6,7 +6,8 @@ import sys
 from dataclasses import dataclass, is_dataclass
 from logging.handlers import TimedRotatingFileHandler
 from os import environ, listdir
-from typing import Any, Dict, Optional, Type, TypeVar, Union
+from typing import (Any, Awaitable, Callable, Dict, Optional, Type, TypeVar,
+                    Union)
 
 import orjson
 import toml
@@ -15,6 +16,9 @@ from aiohttp.web import (Application, HTTPBadRequest, HTTPError, Request,
                          Response, middleware, run_app)
 
 from .typecast import is_typeddict, isinstance_safe, typecast
+
+ENDPOINT_TYPE = Callable[..., Awaitable[Any]]
+HANDLER_TYPE = Callable[[Request], Awaitable[Any]]
 
 T = TypeVar('T')
 ORJSON_OPTION = 0
@@ -225,7 +229,7 @@ def getdoc(obj) -> str:
     return '\n'.join(result) + '\n'
 
 
-def make_router(sp_endpoint):
+def make_router(sp_endpoint: ENDPOINT_TYPE) -> HANDLER_TYPE:
     """
     :param sp_endpoint:
         1.POSITIONAL_ONLY参数表示requestbody
@@ -281,10 +285,10 @@ def make_router(sp_endpoint):
 class Route:
     method: str
     paths: list
-    handler: Any
+    handler: HANDLER_TYPE
 
 
-def rest_mapping(method: str, paths: list):
+def rest_mapping(method: str, paths: list) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
         handler = make_router(sp_endpoint)
         route = Route(method=method.upper(), paths=paths, handler=handler)
@@ -294,37 +298,35 @@ def rest_mapping(method: str, paths: list):
     return g
 
 
-def get_mapping(path: str):
+def get_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
-        handler = make_router(sp_endpoint)
         return rest_mapping(method='GET', paths=[path])(sp_endpoint)
 
     return g
 
 
-def post_mapping(path: str):
+def post_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
-        handler = make_router(sp_endpoint)
         return rest_mapping(method='POST', paths=[path])(sp_endpoint)
 
     return g
 
 
-def put_mapping(path: str):
+def put_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
         return rest_mapping(method='PUT', paths=[path])(sp_endpoint)
 
     return g
 
 
-def patch_mapping(path: str):
+def patch_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
         return rest_mapping(method='PATCH', paths=[path])(sp_endpoint)
 
     return g
 
 
-def delete_mapping(path: str):
+def delete_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
         return rest_mapping(method='DELETE', paths=[path])(sp_endpoint)
 
@@ -420,7 +422,7 @@ class Bridge:
     def add_on_shutdown(self, handler):
         self.app.on_shutdown.append(make_app_signal(handler))
 
-    def add_route(self, route):
+    def add_route(self, route: Route) -> None:
         for path in route.paths:
             self.app.router.add_route(
                 method=route.method, path=path, handler=route.handler)
