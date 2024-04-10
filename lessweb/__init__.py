@@ -1,12 +1,3 @@
-from .bridge import Bridge, \
-    get_mapping, \
-    post_mapping, \
-    put_mapping, \
-    patch_mapping, \
-    delete_mapping, \
-    rest_mapping, \
-    rest_response, \
-    rest_error, \
-    autowire, \
-    service, \
-    getdoc
+from .bridge import (Bridge, autowire, delete_mapping, get_mapping,
+                     patch_mapping, post_mapping, put_mapping, rest_error,
+                     rest_mapping, rest_response, service)

@@ -2,10 +2,11 @@ import sys
 import unittest
 from datetime import date, datetime, time
 from enum import Enum
-from typing import (Dict, Generator, List, Literal, NewType, Optional,
+from typing import (Any, Dict, Generator, List, Literal, NewType, Optional,
                     TypedDict, Union)
 
-from lessweb.typecast import TypeCastError, inspect_type, typecast
+from lessweb.typecast import (TypeCastError, inspect_type,
+                              semi_json_schema_type, typecast)
 
 NoneType = type(None)
 
@@ -34,6 +35,8 @@ class TestInspectType(unittest.TestCase):
             self.assertEqual(inspect_type(int | str), (Union, (int, str)))
             self.assertEqual(inspect_type(int | str | None),
                              (Union, (int, str, NoneType)))
+            self.assertEqual(inspect_type(None | str | int),
+                             (Union, (NoneType, str, int)))
         self.assertEqual(inspect_type(
             Literal['a', 'b']), (Literal, ('a', 'b')))
         self.assertEqual(inspect_type(UserId), (NewType, int))
@@ -43,6 +46,7 @@ class TestInspectType(unittest.TestCase):
                           Dict[str, Union[str, int]])
         self.assertEqual(inspect_type(SampleTypedDict),
                          (dict, {'age': int, 'name': str}))
+        self.assertEqual(inspect_type(Any), (Any,))
         self.assertEqual(inspect_type(SampleElse), (SampleElse,))
         self.assertRaises(NotImplementedError, inspect_type, Generator)
 
@@ -145,6 +149,39 @@ class TestTypecast(unittest.TestCase):
         data = "12.3"
         with self.assertRaises(TypeCastError):
             typecast(data, tp)
+
+
+class TestSemiJsonSchemaType(unittest.TestCase):
+    def test_list(self):
+        result = semi_json_schema_type(list)
+        self.assertEqual(result, {'type': 'array'})
+
+        result = semi_json_schema_type(list[int])
+        self.assertEqual(result, {'type': 'array', 'items': {'type': int}})
+
+    def test_union(self):
+        result = semi_json_schema_type(Union[int, str])
+        self.assertEqual(
+            result, {'union': [{'type': int}, {'type': str}], 'optional': False})
+
+        result = semi_json_schema_type(Union[int, None])
+        self.assertEqual(result, {'type': int, 'optional': True})
+
+        result = semi_json_schema_type(Union[None, int, str])
+        self.assertEqual(
+            result, {'union': [{'type': int}, {'type': str}], 'optional': True})
+
+    def test_literal(self):
+        result = semi_json_schema_type(Literal['a', 'b'])
+        self.assertEqual(result, {'enum': ['a', 'b']})
+
+    def test_any(self):
+        result = semi_json_schema_type(Any)
+        self.assertEqual(result, {})
+
+    def test_custom_class(self):
+        result = semi_json_schema_type(SampleElse)
+        self.assertEqual(result, {'type': SampleElse})
 
 
 if __name__ == '__main__':

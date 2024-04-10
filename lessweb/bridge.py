@@ -7,7 +7,7 @@ from dataclasses import dataclass, is_dataclass
 from logging.handlers import TimedRotatingFileHandler
 from os import environ, listdir
 from typing import (Any, Awaitable, Callable, Dict, Optional, Type, TypeVar,
-                    Union)
+                    Union, get_type_hints)
 
 import orjson
 import toml
@@ -15,7 +15,8 @@ from aiohttp.typedefs import LooseHeaders
 from aiohttp.web import (Application, HTTPBadRequest, HTTPError, Request,
                          Response, middleware, run_app)
 
-from .typecast import is_typeddict, isinstance_safe, typecast
+from .typecast import (is_typeddict, isinstance_safe, semi_json_schema_type,
+                       typecast)
 
 ENDPOINT_TYPE = Callable[..., Awaitable[Any]]
 HANDLER_TYPE = Callable[[Request], Awaitable[Any]]
@@ -205,31 +206,19 @@ def make_app_signal(sp_handler):
     return aio_handler
 
 
-def getdoc(obj) -> str:
-    """
-    获得模块或对象的docstring
-    实现了递归包含，只需要以「:include 」开头
-    """
-    if isinstance(obj, str):
-        try:
-            module_or_object = importlib.import_module(obj)
-        except ModuleNotFoundError:
-            module_name, object_name = obj.rsplit('.', 1)
-            module_or_object = getattr(
-                importlib.import_module(module_name), object_name)
-        return getdoc(module_or_object)
-    result = []
-    docstring = inspect.getdoc(obj) or ''
-    for line in docstring.splitlines():
-        if line.strip().startswith(':include '):
-            include_doc = getdoc(line.replace(':include ', '').strip())
-            result.append(include_doc)
-        else:
-            result.append(line)
-    return '\n'.join(result) + '\n'
+@dataclass
+class Route:
+    method: str
+    paths: list
+    summary: Optional[str]
+    params: dict
+    request_body: Optional[Type]
+    response_body: Optional[Type]
+    handler: HANDLER_TYPE
+    extra: dict
 
 
-def make_router(sp_endpoint: ENDPOINT_TYPE) -> HANDLER_TYPE:
+def make_router(method: str, paths: list, sp_endpoint: ENDPOINT_TYPE) -> Route:
     """
     :param sp_endpoint:
         1.POSITIONAL_ONLY参数表示requestbody
@@ -237,16 +226,32 @@ def make_router(sp_endpoint: ENDPOINT_TYPE) -> HANDLER_TYPE:
         3.其他参数支持可注入类型
     :return: 形如foo(request)这样的函数
     """
+    assert inspect.iscoroutinefunction(
+        sp_endpoint), f'{sp_endpoint} must be coroutine function'
+    params: dict = {}
+    request_body: Optional[Type] = None
+    response_body: Optional[Type] = None
+    for name, (depends_type, default, kind) in func_arg_spec(sp_endpoint).items():
+        if kind == POSITIONAL_ONLY and request_body is None:
+            request_body = depends_type
+        elif kind == KEYWORD_ONLY:
+            params[name] = {
+                'name': name, 'required': default is not None, 'schema': semi_json_schema_type(depends_type)}
+
+    if get_type_hints(sp_endpoint).get('return') is not None:
+        response_body = get_type_hints(sp_endpoint)['return']
 
     async def aio_endpoint(request: Request):
-        assert inspect.iscoroutinefunction(
-            sp_endpoint), f'{sp_endpoint} must be coroutine function'
         args = []
         kwargs: Dict[str, Any] = {}
         for name, (depends_type, default, kind) in func_arg_spec(sp_endpoint).items():
             if kind == POSITIONAL_ONLY:
                 try:
-                    data = orjson.loads(await request.text())
+                    request_text = request['lessweb.request_stack'].pop()
+                except IndexError:
+                    request_text = await request.text()
+                try:
+                    data = orjson.loads(request_text)
                 except orjson.JSONDecodeError:
                     raise HTTPBadRequest(
                         text=f'BadRequest: request body raise JSONDecodeError')
@@ -278,22 +283,22 @@ def make_router(sp_endpoint: ENDPOINT_TYPE) -> HANDLER_TYPE:
         else:
             return result
 
-    return aio_endpoint
-
-
-@dataclass
-class Route:
-    method: str
-    paths: list
-    handler: HANDLER_TYPE
+    route = Route(
+        method=method.upper(),
+        paths=paths,
+        summary=inspect.getdoc(sp_endpoint),
+        params=params,
+        request_body=request_body,
+        response_body=response_body,
+        handler=aio_endpoint,
+        extra={},
+    )
+    return route
 
 
 def rest_mapping(method: str, paths: list) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
-        handler = make_router(sp_endpoint)
-        route = Route(method=method.upper(), paths=paths, handler=handler)
-        route.__doc__ = inspect.getdoc(sp_endpoint)
-        return route
+        return make_router(method, paths, sp_endpoint)
 
     return g
 
@@ -344,9 +349,10 @@ class Bridge:
             self.app = app
         self.config = config
         self._load_config()
+        self.app['lessweb.bridge'] = self
+        self.app['lessweb.apidoc.routes'] = []
 
     def _load_config(self):
-        self.app['bootstrap'] = self
         self.app['config'] = self._load_config_with_env()
         self._load_logger()
         self._load_orjson()
@@ -426,6 +432,7 @@ class Bridge:
         for path in route.paths:
             self.app.router.add_route(
                 method=route.method, path=path, handler=route.handler)
+            self.app['lessweb.apidoc.routes'].append(route)
 
     def add_route_scan(self, endpoint_package: str):
         endpoint_mdl = importlib.import_module(endpoint_package)

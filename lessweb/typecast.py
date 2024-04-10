@@ -64,6 +64,7 @@ def inspect_type(tp):
     inspect_type(int | None) => (Union, (int, NoneType))
     inspect_type(int | str) => (Union, (int, str))
     inspect_type(int | str | None) => (Union, (int, str, NoneType))
+    inspect_type(None | str | int) => (Union, (str, int, NoneType))
     inspect_type(Literal['a', 'b']) => (Literal, ('a', 'b'))
     inspect_type(NewType) => (NewType, __supertype__)
     inspect_type(dict) => (dict,)
@@ -94,6 +95,46 @@ def inspect_type(tp):
 
 def is_list_type(tp):
     return tp is list or typing_inspect.get_origin(tp) is list
+
+
+def semi_json_schema_type(tp):
+    """
+    semi_json_schema_type(list) => {'type': 'array'}
+    semi_json_schema_type(list[int]) => {'type': 'array', 'items': {'type': int}}
+    semi_json_schema_type(Union[int, None]) => {'type': int, 'optional': True}
+    semi_json_schema_type(Union[int, str]) => {'union': [{'type': int}, {'type': str}], 'optional': False}
+    semi_json_schema_type(Union[None, int, str]) => {'union': [{'type': int}, {'type': str}], 'optional': True}
+    semi_json_schema_type(Literal['a', 'b']) => {'enum': ['a', 'b']}
+    semi_json_schema_type(Any) => {}
+    semi_json_schema_type(cls) => {'type': cls}
+    """
+    origin_type, *type_args_wrapped = inspect_type(tp)
+    if not type_args_wrapped:
+        if origin_type == list:
+            return {'type': 'array'}
+        elif origin_type == Any:
+            return {}
+        else:
+            return {'type': tp}
+    type_args = type_args_wrapped[0]
+    if origin_type == list:
+        return {'type': 'array', 'items': semi_json_schema_type(type_args)}
+    elif origin_type == Union:
+        if NoneType in type_args:
+            type_args_list = [
+                item for item in type_args if item is not NoneType]
+            is_optional = True
+        else:
+            type_args_list = list(type_args)
+            is_optional = False
+        if len(type_args_list) == 1:
+            return {**semi_json_schema_type(type_args_list[0]), 'optional': is_optional}
+        else:
+            return {'union': [semi_json_schema_type(item) for item in type_args_list], 'optional': is_optional}
+    elif origin_type == Literal:
+        return {'enum': list(type_args)}
+    else:
+        return {'type': tp}
 
 
 def typecast(data, tp):
