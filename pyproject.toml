@@ -17,8 +17,18 @@ dependencies = [
     "aiohttp",
     "toml",
     "orjson",
-    "lesscli",
     "typing_inspect",
+]
+
+[project.optional-dependencies]
+test = [
+    "coverage",
+    "pytest",
+    "pytest-cov",
+    "pytest-mock",
+    "pytest-asyncio",
+    "pytest-aiohttp",
+    "types-toml",
 ]
 
 [tool.setuptools.package-data]

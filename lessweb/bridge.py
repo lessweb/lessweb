@@ -16,8 +16,8 @@ from aiohttp.typedefs import LooseHeaders
 from aiohttp.web import (Application, HTTPBadRequest, HTTPError, Request,
                          Response, middleware, run_app)
 
-from .typecast import (TypeCastError, is_typeddict, isinstance_safe,
-                       semi_json_schema_type, typecast)
+from .typecast import (is_typeddict, isinstance_safe, semi_json_schema_type,
+                       typecast)
 
 ENDPOINT_TYPE = Callable[..., Awaitable[Any]]
 HANDLER_TYPE = Callable[[Request], Awaitable[Any]]
@@ -167,7 +167,8 @@ def autowire(ctx: Union[Application, Request], cls: Type[T], name: Optional[str]
     elif isinstance(ctx, Request) and cls is Application:
         return ctx.app  # type: ignore
     elif not hasattr(cls, '__lessweb_service__'):
-        raise TypeCastError(f'cannot autowire ({ref}) {ctx=} {cls=})')
+        raise TypeError(
+            f'cannot autowire class which is not a service: {ref} {ctx=} {cls=}')
     depends_on = get_depends_on(cls.__init__)
     args: list = []
     for name, depends_type in depends_on:
@@ -236,8 +237,8 @@ def make_router(method: str, paths: list, sp_endpoint: ENDPOINT_TYPE) -> Route:
     :return: 形如foo(request)这样的函数
     :raise: `TypeCastError`
     """
-    assert inspect.iscoroutinefunction(
-        sp_endpoint), f'{sp_endpoint} must be coroutine function'
+    if not inspect.iscoroutinefunction(sp_endpoint):
+        raise TypeError(f'endpoint must be coroutine function: {sp_endpoint=}')
     params: dict = {}
     request_body: Optional[Type] = None
     response_body: Optional[Type] = None
@@ -254,12 +255,16 @@ def make_router(method: str, paths: list, sp_endpoint: ENDPOINT_TYPE) -> Route:
     async def aio_endpoint(request: Request):
         args = []
         kwargs: Dict[str, Any] = {}
+        has_read_request_body = False
         for name, (depends_type, default, kind) in func_arg_spec(sp_endpoint).items():
             if kind == POSITIONAL_ONLY:
-                try:
-                    request_text = request['lessweb.request_stack'].pop()
-                except IndexError:
+                if (request_stack := request.get('lessweb.request_stack')) and isinstance(request_stack, list):
+                    request_text = request_stack.pop()
+                elif not has_read_request_body:
                     request_text = await request.text()
+                    has_read_request_body = True
+                else:
+                    raise TypeError(f'EOF when reading request body: {name=}')
                 try:
                     data = orjson.loads(request_text)
                 except orjson.JSONDecodeError:
