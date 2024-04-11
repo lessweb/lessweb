@@ -342,7 +342,7 @@ class Bridge:
     app: Application
     config: Optional[str]
 
-    def __init__(self, config: Optional[str] = None, app: Optional[Application] = None):
+    def __init__(self, config: Optional[str] = None, app: Optional[Application] = None) -> None:
         if app is None:
             self.app = Application()
         else:
@@ -350,14 +350,14 @@ class Bridge:
         self.config = config
         self._load_config()
         self.app['lessweb.bridge'] = self
-        self.app['lessweb.apidoc.routes'] = []
+        self.app['lessweb.routes'] = []
 
-    def _load_config(self):
+    def _load_config(self) -> None:
         self.app['config'] = self._load_config_with_env()
         self._load_logger()
         self._load_orjson()
 
-    def _load_config_with_env(self):
+    def _load_config_with_env(self) -> dict[str, Any]:
         if self.config:
             config = toml.loads(open(self.config).read())
         else:
@@ -377,7 +377,7 @@ class Bridge:
                         data[key] = environ[env_key]
         return config
 
-    def _load_logger(self):
+    def _load_logger(self) -> None:
         logger_conf = self.app['config'].get('logger', {})
         logger = logging.getLogger(logger_conf.get('name'))
         logger.setLevel(logger_conf.get('level', 'INFO'))
@@ -404,20 +404,20 @@ class Bridge:
                 stream_handler.setFormatter(formatter)
             logger.addHandler(stream_handler)
 
-    def _load_orjson(self):
+    def _load_orjson(self) -> None:
         init_orjson_option(self.app['config']
                            ['bootstrap'].get('orjson_option', ''))
 
-    def add_middleware(self, handler):
+    def add_middleware(self, handler) -> None:
         self.app.middlewares.append(make_middleware(handler))
 
-    def add_on_startup(self, handler):
+    def add_on_startup(self, handler) -> None:
         self.app.on_startup.append(make_app_signal(handler))
 
-    def add_on_cleanup(self, handler):
+    def add_on_cleanup(self, handler) -> None:
         self.app.on_cleanup.append(make_app_signal(handler))
 
-    def add_mod_ctx(self, handler_on_startup, handler_on_cleanup):
+    def add_mod_ctx(self, handler_on_startup, handler_on_cleanup) -> None:
         async def aio_handler(app):
             await make_app_signal(handler_on_startup)(app)
             yield
@@ -425,16 +425,16 @@ class Bridge:
 
         self.app.cleanup_ctx.append(aio_handler)
 
-    def add_on_shutdown(self, handler):
+    def add_on_shutdown(self, handler) -> None:
         self.app.on_shutdown.append(make_app_signal(handler))
 
     def add_route(self, route: Route) -> None:
         for path in route.paths:
             self.app.router.add_route(
                 method=route.method, path=path, handler=route.handler)
-            self.app['lessweb.apidoc.routes'].append(route)
+            self.app['lessweb.routes'].append(route)
 
-    def add_route_scan(self, endpoint_package: str):
+    def add_route_scan(self, endpoint_package: str) -> None:
         endpoint_mdl = importlib.import_module(endpoint_package)
         if endpoint_mdl.__spec__ is None or not endpoint_mdl.__spec__.submodule_search_locations:
             raise ImportError(f'{endpoint_package} is an empty package')
@@ -446,6 +446,6 @@ class Bridge:
                     if isinstance(item, Route):
                         self.add_route(item)
 
-    def run_app(self, **kwargs):
+    def run_app(self, **kwargs) -> None:
         port = int(self.app['config']['bootstrap'].get('port', 8080))
         run_app(app=self.app, port=port, **kwargs)

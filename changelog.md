@@ -1,6 +1,6 @@
 ## version 1.3.0 [In Progress]
 1. Deprecated: `getdoc()`;
-2. Feature: support app['lessweb.apidoc.routes'];
+2. Feature: support app['lessweb.routes'];
 3. Feature: Support multiple positional-only parameters;  //TODO: need testing
 
 ## version 1.2.0
