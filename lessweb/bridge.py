@@ -6,25 +6,35 @@ import sys
 from dataclasses import dataclass, is_dataclass
 from logging.handlers import TimedRotatingFileHandler
 from os import environ, listdir
-from typing import (Any, Awaitable, Callable, Dict, Optional, Type, TypeVar,
-                    Union, get_type_hints)
+from typing import (Any, Awaitable, Callable, Dict, Literal, Optional, Type,
+                    TypeVar, Union, cast, get_type_hints)
 
 import orjson
 import toml
+import typing_inspect
 from aiohttp.typedefs import LooseHeaders
 from aiohttp.web import (Application, HTTPBadRequest, HTTPError, Request,
                          Response, middleware, run_app)
 
-from .typecast import (is_typeddict, isinstance_safe, semi_json_schema_type,
-                       typecast)
+from .typecast import (TypeCastError, is_typeddict, isinstance_safe,
+                       semi_json_schema_type, typecast)
 
 ENDPOINT_TYPE = Callable[..., Awaitable[Any]]
 HANDLER_TYPE = Callable[[Request], Awaitable[Any]]
+HTTP_METHOD_TYPE = Literal['GET', 'POST',
+                           'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']
 
 T = TypeVar('T')
 ORJSON_OPTION = 0
 POSITIONAL_ONLY = 0
 KEYWORD_ONLY = 3
+
+
+def cast_http_method(method: str) -> HTTP_METHOD_TYPE:
+    method = method.upper()
+    tp_args = typing_inspect.get_args(HTTP_METHOD_TYPE)
+    assert method in tp_args, f'Invalid HTTP method: {method}'
+    return cast(HTTP_METHOD_TYPE, method)
 
 
 def make_environ_key(key_path: str):
@@ -157,7 +167,7 @@ def autowire(ctx: Union[Application, Request], cls: Type[T], name: Optional[str]
     elif isinstance(ctx, Request) and cls is Application:
         return ctx.app  # type: ignore
     elif not hasattr(cls, '__lessweb_service__'):
-        raise TypeError(f'cannot autowire ({ref}) {ctx=} {cls=})')
+        raise TypeCastError(f'cannot autowire ({ref}) {ctx=} {cls=})')
     depends_on = get_depends_on(cls.__init__)
     args: list = []
     for name, depends_type in depends_on:
@@ -208,7 +218,7 @@ def make_app_signal(sp_handler):
 
 @dataclass
 class Route:
-    method: str
+    method: HTTP_METHOD_TYPE
     paths: list
     summary: Optional[str]
     params: dict
@@ -220,11 +230,11 @@ class Route:
 
 def make_router(method: str, paths: list, sp_endpoint: ENDPOINT_TYPE) -> Route:
     """
-    :param sp_endpoint:
-        1.POSITIONAL_ONLY参数表示requestbody
-        2.int和str类型参数表示路径参数
-        3.其他参数支持可注入类型
+    :param method: HTTP方法
+    :param paths: 路径列表
+    :param sp_endpoint: 用户定义的endpoint
     :return: 形如foo(request)这样的函数
+    :raise: `TypeCastError`
     """
     assert inspect.iscoroutinefunction(
         sp_endpoint), f'{sp_endpoint} must be coroutine function'
@@ -284,7 +294,7 @@ def make_router(method: str, paths: list, sp_endpoint: ENDPOINT_TYPE) -> Route:
             return result
 
     route = Route(
-        method=method.upper(),
+        method=cast_http_method(method),
         paths=paths,
         summary=inspect.getdoc(sp_endpoint),
         params=params,
