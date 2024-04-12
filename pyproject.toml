@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "mypy",
+    "yapf",
     "coverage",
     "pytest",
     "pytest-cov",
