@@ -3,7 +3,9 @@
 2. Feature: support app['lessweb.routes'];
 3. Feature: support multiple positional-only parameters;
 4. Feature: add e2e test (new tests/e2e/ dir);
-5. Feature: when incorrectly used, raise TypeError as the standard specification.
+5. Feature: when incorrectly used, raise TypeError as the standard specification;
+6. Feature: add autopep8 linter;
+7. Feature: assert endpoint name compatible with method-path;
 
 ## version 1.2.0
 1. Feature: support typecasting Union and NewType;

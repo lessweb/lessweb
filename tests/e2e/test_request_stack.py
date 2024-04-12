@@ -8,17 +8,17 @@ from lessweb import Bridge, post_mapping, put_mapping
 
 
 @put_mapping('/user')
-async def edit_user(vo, /):
+async def put_edit_user(vo, /):
     return {'data': vo}
 
 
 @post_mapping('/user')
-async def creator_user(real_vo, raw_vo, /):
+async def post_create_user(real_vo, raw_vo, /):
     return [real_vo, raw_vo]
 
 
 @post_mapping('/user/_eof')
-async def creator_user_expect_eof(real_vo, raw_vo, eof_vo, /):
+async def post_user_expect_eof(real_vo, raw_vo, eof_vo, /):
     return {}
 
 
@@ -33,13 +33,13 @@ async def request_body_filter(handler, request):
         raise HTTPInternalServerError(text=str(e))
 
 
-@ pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_hello(aiohttp_client):
     app = web.Application()
     bridge = Bridge(app=app)
-    bridge.add_route(edit_user)
-    bridge.add_route(creator_user)
-    bridge.add_route(creator_user_expect_eof)
+    bridge.add_route(put_edit_user)
+    bridge.add_route(post_create_user)
+    bridge.add_route(post_user_expect_eof)
     bridge.add_middleware(request_body_filter)
     client = await aiohttp_client(app)
     resp = await client.put('/user', json={'name': 'John'})

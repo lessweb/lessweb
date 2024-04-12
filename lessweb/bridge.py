@@ -311,8 +311,33 @@ def make_router(method: str, paths: list, sp_endpoint: ENDPOINT_TYPE) -> Route:
     return route
 
 
+def contains_sub_string(s: str, sub: str) -> bool:
+    p = q = 0
+    while p < len(s) and q < len(sub):
+        if s[p] == sub[q]:
+            q += 1
+        p += 1
+    return q == len(sub)
+
+
+def assert_endpoint_name_compatible(sp_endpoint: ENDPOINT_TYPE, method: str, path: str) -> None:
+    """
+    限制endpoint函数名必须字面上包含method+path。
+    作用：避免无谓的思考
+
+    :raise: NameError
+    """
+    endpoint_slug = ''.join(re.findall(
+        '[a-z0-9]+', sp_endpoint.__name__.lower()))
+    method_path_slug = ''.join(re.findall('[a-z0-9]+', path.lower()))
+    if not contains_sub_string(endpoint_slug, method.lower() + method_path_slug):
+        raise NameError(
+            f'endpoint name "{sp_endpoint.__name__}" should contain "{method.lower() + method_path_slug}" to compatible with [{method} {path}]')
+
+
 def rest_mapping(method: str, paths: list) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
+        assert_endpoint_name_compatible(sp_endpoint, method, '')
         return make_router(method, paths, sp_endpoint)
 
     return g
@@ -320,6 +345,7 @@ def rest_mapping(method: str, paths: list) -> Callable[[ENDPOINT_TYPE], Route]:
 
 def get_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
+        assert_endpoint_name_compatible(sp_endpoint, 'GET', path)
         return rest_mapping(method='GET', paths=[path])(sp_endpoint)
 
     return g
@@ -327,6 +353,7 @@ def get_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
 
 def post_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
+        assert_endpoint_name_compatible(sp_endpoint, 'POST', path)
         return rest_mapping(method='POST', paths=[path])(sp_endpoint)
 
     return g
@@ -334,6 +361,7 @@ def post_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
 
 def put_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
+        assert_endpoint_name_compatible(sp_endpoint, 'PUT', path)
         return rest_mapping(method='PUT', paths=[path])(sp_endpoint)
 
     return g
@@ -341,6 +369,7 @@ def put_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
 
 def patch_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
+        assert_endpoint_name_compatible(sp_endpoint, 'PATCH', path)
         return rest_mapping(method='PATCH', paths=[path])(sp_endpoint)
 
     return g
@@ -348,6 +377,7 @@ def patch_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
 
 def delete_mapping(path: str) -> Callable[[ENDPOINT_TYPE], Route]:
     def g(sp_endpoint) -> Route:
+        assert_endpoint_name_compatible(sp_endpoint, 'DELETE', path)
         return rest_mapping(method='DELETE', paths=[path])(sp_endpoint)
 
     return g
