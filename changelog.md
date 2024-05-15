@@ -1,4 +1,4 @@
-## version 1.3.0 [In Progress]
+## version 1.3.0
 1. Deprecated: `getdoc()`;
 2. Feature: support app['lessweb.routes'];
 3. Feature: support multiple positional-only parameters;
@@ -6,6 +6,7 @@
 5. Feature: when incorrectly used, raise TypeError as the standard specification;
 6. Feature: add autopep8 linter;
 7. Feature: assert endpoint name compatible with method-path;
+8. Feature: Route add member: endpoint;
 
 ## version 1.2.0
 1. Feature: support typecasting Union and NewType;

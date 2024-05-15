@@ -226,6 +226,7 @@ class Route:
     request_body: Optional[Type]
     response_body: Optional[Type]
     handler: HANDLER_TYPE
+    endpoint: ENDPOINT_TYPE
     extra: dict
 
 
@@ -306,6 +307,7 @@ def make_router(method: str, paths: list, sp_endpoint: ENDPOINT_TYPE) -> Route:
         request_body=request_body,
         response_body=response_body,
         handler=aio_endpoint,
+        endpoint=sp_endpoint,
         extra={},
     )
     return route
@@ -323,16 +325,15 @@ def contains_sub_string(s: str, sub: str) -> bool:
 def assert_endpoint_name_compatible(sp_endpoint: ENDPOINT_TYPE, method: str, path: str) -> None:
     """
     限制endpoint函数名必须字面上包含method+path。
-    作用：避免无谓的思考
+    作用：1.避免无谓的思考;2.杜绝在endpoint上滥用修饰器。
 
     :raise: NameError
     """
-    endpoint_slug = ''.join(re.findall(
-        '[a-z0-9]+', sp_endpoint.__name__.lower()))
-    method_path_slug = ''.join(re.findall('[a-z0-9]+', path.lower()))
-    if not contains_sub_string(endpoint_slug, method.lower() + method_path_slug):
+    method_path_slug = f'{method.lower()}_' + \
+        '_'.join(re.findall('[a-z0-9]+', path.lower()))
+    if not contains_sub_string(sp_endpoint.__name__,  method_path_slug):
         raise NameError(
-            f'endpoint name "{sp_endpoint.__name__}" should contain "{method.lower() + method_path_slug}" to compatible with [{method} {path}]')
+            f'endpoint name "{sp_endpoint.__name__}" should contain "{method_path_slug}" to compatible with [{method} {path}]')
 
 
 def rest_mapping(method: str, paths: list) -> Callable[[ENDPOINT_TYPE], Route]:
