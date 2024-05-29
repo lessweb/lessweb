@@ -7,6 +7,7 @@ import re
 import sys
 from typing import (Any, Dict, List, Literal, NewType, Type, Union,
                     get_type_hints)
+from uuid import UUID
 
 import typing_inspect
 
@@ -173,6 +174,8 @@ def typecast(data, tp):
         return datetime.date.fromisoformat(data)
     elif issubclass_safe(tp, datetime.time):
         return datetime.time.fromisoformat(data)
+    elif issubclass_safe(tp, UUID):
+        return tp(data)
     elif isinstance(data, str):
         if issubclass_safe(tp, str):
             return tp(data)

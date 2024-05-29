@@ -329,8 +329,9 @@ def assert_endpoint_name_compatible(sp_endpoint: ENDPOINT_TYPE, method: str, pat
 
     :raise: NameError
     """
+    path = re.sub(r':.*?\}', '}', path.lower())
     method_path_slug = f'{method.lower()}_' + \
-        '_'.join(re.findall('[a-z0-9]+', path.lower()))
+        '_'.join(re.findall('[a-z0-9]+', path))
     if not contains_sub_string(sp_endpoint.__name__,  method_path_slug):
         raise NameError(
             f'endpoint name "{sp_endpoint.__name__}" should contain "{method_path_slug}" to compatible with [{method} {path}]')

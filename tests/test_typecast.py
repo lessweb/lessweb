@@ -4,6 +4,7 @@ from datetime import date, datetime, time
 from enum import Enum
 from typing import (Any, Dict, Generator, List, Literal, NewType, Optional,
                     TypedDict, Union)
+from uuid import UUID
 
 from lessweb.typecast import (TypeCastError, inspect_type,
                               semi_json_schema_type, typecast)
@@ -86,6 +87,12 @@ class TestTypecast(unittest.TestCase):
         tp = time
         result = typecast(data, tp)
         self.assertEqual(result, time.fromisoformat(data))
+
+    def test_typecast_uuid(self):
+        data = 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6'
+        tp = UUID
+        result = typecast(data, tp)
+        self.assertEqual(result.hex, 'f81d4fae7dec11d0a76500a0c91e6bf6')
 
     def test_typecast_str(self):
         data = "Hello"

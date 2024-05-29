@@ -1,3 +1,7 @@
+## version 1.4.0
+1. Feature: support data type UUID for the request parameters.
+2. Feature: optimize endpoint name compatibility check.
+
 ## version 1.3.0
 1. Deprecated: `getdoc()`;
 2. Feature: support app['lessweb.routes'];
