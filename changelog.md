@@ -1,3 +1,7 @@
+## version 1.5.0
+1. Feature: add @config and update autowire;
+2. Feature: rename add_mod_ctx to add_config_ctx.
+
 ## version 1.4.0
 1. Feature: support data type UUID for the request parameters.
 2. Feature: optimize endpoint name compatibility check.

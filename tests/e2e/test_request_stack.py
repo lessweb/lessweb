@@ -1,3 +1,4 @@
+from aiohttp.web import Request
 import json
 
 import pytest
@@ -22,7 +23,7 @@ async def post_user_expect_eof(real_vo, raw_vo, eof_vo, /):
     return {}
 
 
-async def request_body_filter(handler, request):
+async def request_body_filter(handler, request: Request):
     raw_request = await request.json()
     raw_request['name'] = raw_request['name'].upper()
     request['lessweb.request_stack'] = [

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lessweb"
-version = "1.4.0"
+version = "1.5.0"
 description = 'A pythonic web framework'
 readme = "README.md"
 requires-python = ">=3.9"
@@ -35,3 +35,7 @@ test = [
 
 [tool.setuptools.package-data]
 "lessweb" = ["py.typed"]
+
+[tool.mypy]
+ignore_missing_imports = true
+check_untyped_defs = true

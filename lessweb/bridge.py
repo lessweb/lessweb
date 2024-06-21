@@ -129,7 +129,33 @@ def rest_error(
 
 
 def service(f: T) -> T:
+    """
+    Service life cycle example:
+
+    >>> @service
+    ... class Foo:
+    ...   def __init__(self, request: Request): ...
+    >>> async def foo_filter(handler, foo: Foo): ...
+    >>> bridge.add_middleware(foo_filter)
+
+    """
     f.__lessweb_service__ = 1  # type: ignore[attr-defined]
+    return f
+
+
+def config(f: T) -> T:
+    """
+    Config life cycle example:
+
+    >>> @config
+    ... class FooConfig:
+    ...   def __init__(self, config: dict, app: Application): ...
+    >>> async def foo_startup(foo_config: FooConfig): ...
+    >>> async def foo_cleanup(foo_config: FooConfig): ...
+    >>> bridge.add_config_ctx(foo_startup, foo_cleanup)
+
+    """
+    f.__lessweb_config__ = 1  # type: ignore[attr-defined]
     return f
 
 
@@ -162,13 +188,16 @@ def autowire(ctx: Union[Application, Request], cls: Type[T], name: Optional[str]
     elif isinstance(ctx, Request) and ref in ctx.config_dict:
         return ctx.config_dict[ref]
     logging.debug('autowire-> %s %s', ctx, cls)
-    if isinstance_safe(ctx, cls):
-        return ctx  # type: ignore
-    elif isinstance(ctx, Request) and cls is Application:
-        return ctx.app  # type: ignore
-    elif not hasattr(cls, '__lessweb_service__'):
+    if hasattr(cls, '__lessweb_config__'):
+        ctx = app_ctx
+    if isinstance(ctx, cls):
+        return ctx
+    elif isinstance(ctx, Request) and not hasattr(cls, '__lessweb_service__'):
         raise TypeError(
             f'cannot autowire class which is not a service: {ref} {ctx=} {cls=}')
+    elif isinstance(ctx, Application) and not hasattr(cls, '__lessweb_config__'):
+        raise TypeError(
+            f'cannot autowire class which is not a config: {ref} {ctx=} {cls=}')
     depends_on = get_depends_on(cls.__init__)
     args: list = []
     for name, depends_type in depends_on:
@@ -464,7 +493,7 @@ class Bridge:
     def add_on_cleanup(self, handler) -> None:
         self.app.on_cleanup.append(make_app_signal(handler))
 
-    def add_mod_ctx(self, handler_on_startup, handler_on_cleanup) -> None:
+    def add_config_ctx(self, handler_on_startup, handler_on_cleanup) -> None:
         async def aio_handler(app):
             await make_app_signal(handler_on_startup)(app)
             yield
