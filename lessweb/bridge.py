@@ -22,7 +22,7 @@ from .typecast import (is_typeddict, isinstance_safe, semi_json_schema_type,
 ENDPOINT_TYPE = Callable[..., Awaitable[Any]]
 HANDLER_TYPE = Callable[[Request], Awaitable[Any]]
 HTTP_METHOD_TYPE = Literal['GET', 'POST',
-                           'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']
+                           'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD', '*']
 
 T = TypeVar('T')
 ORJSON_OPTION = 0
@@ -358,6 +358,8 @@ def assert_endpoint_name_compatible(sp_endpoint: ENDPOINT_TYPE, method: str, pat
 
     :raise: NameError
     """
+    if method == '*':
+        return
     path = re.sub(r':.*?\}', '}', path.lower())
     method_path_slug = f'{method.lower()}_' + \
         '_'.join(re.findall('[a-z0-9]+', path))
