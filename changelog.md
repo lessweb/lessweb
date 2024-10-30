@@ -1,3 +1,7 @@
+## version 2.0.0
+
+(In progress...)
+
 ## version 1.5.0
 1. Feature: add @config and update autowire;
 2. Feature: rename add_mod_ctx to add_config_ctx.

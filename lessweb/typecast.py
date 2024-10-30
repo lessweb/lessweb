@@ -26,6 +26,13 @@ def parse_csv(csv_text):
     return list(csv.reader([csv_text]))[0]
 
 
+def isclasses(*cls_list) -> bool:
+    """
+    直接用issubclass()会抛异常，项目中需要用如下方式判断是否子类：if isclasses(A, B) and issubclass(A, B): ...
+    """
+    return all(inspect.isclass(cls) for cls in cls_list)
+
+
 def issubclass_safe(x, tp_tuple) -> bool:
     try:
         return issubclass(x, tp_tuple)

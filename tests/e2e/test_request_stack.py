@@ -1,47 +1,60 @@
-from aiohttp.web import Request
 import json
+from typing import Annotated
 
 import pytest
 from aiohttp import web
-from aiohttp.web import HTTPInternalServerError
+from aiohttp.web import HTTPInternalServerError, Request
 
-from lessweb import Bridge, post_mapping, put_mapping
+from lessweb import Bridge
+from lessweb.annotation import Post, Put
+from lessweb.ioc import Middleware, Service, push_request_stack
 
 
-@put_mapping('/user')
-async def put_edit_user(vo, /):
+async def put_edit_user(vo, /) -> Annotated[dict, Put('/user')]:
     return {'data': vo}
 
 
-@post_mapping('/user')
-async def post_create_user(real_vo, raw_vo, /):
+async def post_create_user(real_vo, raw_vo, /) -> Annotated[list, Post('/user')]:
     return [real_vo, raw_vo]
 
 
-@post_mapping('/user/_eof')
-async def post_user_expect_eof(real_vo, raw_vo, eof_vo, /):
+async def post_user_expect_eof(real_vo, raw_vo, eof_vo, /) -> Annotated[dict, Post('/user/_eof')]:
     return {}
 
 
-async def request_body_filter(handler, request: Request):
-    raw_request = await request.json()
-    raw_request['name'] = raw_request['name'].upper()
-    request['lessweb.request_stack'] = [
-        json.dumps(raw_request, ensure_ascii=False)]
-    try:
-        return await handler()
-    except TypeError as e:
-        raise HTTPInternalServerError(text=str(e))
+class UpperService(Service):
+    def upper(self, name: str) -> str:
+        return name.upper()
+
+
+class UpperFilter(Middleware):
+    upper_service: UpperService
+
+    def __init__(self, upper_service: UpperService) -> None:
+        self.upper_service = upper_service
+
+    async def on_request(self, request: Request, handler):
+        raw_request = await request.json()
+        push_request_stack(request, await request.text())
+        raw_request['name'] = self.upper_service.upper(raw_request['name'])
+        push_request_stack(request, json.dumps(
+            raw_request, ensure_ascii=False))
+        try:
+            return await handler(request)
+        except TypeError as e:
+            raise HTTPInternalServerError(text=str(e))
 
 
 @pytest.mark.asyncio
 async def test_hello(aiohttp_client):
     app = web.Application()
     bridge = Bridge(app=app)
-    bridge.add_route(put_edit_user)
-    bridge.add_route(post_create_user)
-    bridge.add_route(post_user_expect_eof)
-    bridge.add_middleware(request_body_filter)
+    bridge.scan(
+        put_edit_user,
+        post_create_user,
+        post_user_expect_eof,
+        UpperFilter,
+    )
     client = await aiohttp_client(app)
     resp = await client.put('/user', json={'name': 'John'})
     assert resp.status == 200
@@ -56,4 +69,4 @@ async def test_hello(aiohttp_client):
     resp = await client.post('/user/_eof', json={'name': 'John'})
     assert resp.status == 500
     response_text = await resp.text()
-    assert response_text == 'EOF when reading request body: name=\'eof_vo\''
+    assert response_text == 'request stack is empty for param: eof_vo'
