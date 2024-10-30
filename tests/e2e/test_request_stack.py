@@ -35,10 +35,9 @@ class UpperFilter(Middleware):
 
     async def on_request(self, request: Request, handler):
         raw_request = await request.json()
-        push_request_stack(request, await request.text())
+        push_request_stack(request, raw_request.copy())
         raw_request['name'] = self.upper_service.upper(raw_request['name'])
-        push_request_stack(request, json.dumps(
-            raw_request, ensure_ascii=False))
+        push_request_stack(request, raw_request.copy())
         try:
             return await handler(request)
         except TypeError as e:

@@ -2,7 +2,7 @@ import inspect
 import logging
 from dataclasses import is_dataclass
 from typing import (Annotated, Any, Awaitable, Callable, Dict, Optional, Tuple,
-                    Type, TypeVar, get_origin, get_type_hints)
+                    Type, TypeVar, Union, get_origin, get_type_hints)
 
 import orjson
 import pydantic
@@ -16,6 +16,7 @@ from lessweb.utils import absolute_ref
 
 ENDPOINT_TYPE = Callable[..., Awaitable[Any]]
 HANDLER_TYPE = Callable[[Request], Awaitable[Any]]
+REQUEST_STACK_VALUE = Union[str, dict, list, pydantic.BaseModel]
 ORJSON_OPTION = 0
 POSITIONAL_ONLY = 0
 KEYWORD_ONLY = 3
@@ -304,7 +305,7 @@ def rest_response(
     return response
 
 
-def get_request_stack(request: Request) -> list[str]:
+def get_request_stack(request: Request) -> list[REQUEST_STACK_VALUE]:
     """
     用于实现请求级别对于requestBody的统一处理。
     """
@@ -314,7 +315,7 @@ def get_request_stack(request: Request) -> list[str]:
     return request[REQUEST_STACK_KEY]
 
 
-def push_request_stack(request: Request, value: str):
+def push_request_stack(request: Request, value: REQUEST_STACK_VALUE):
     request_stack = get_request_stack(request)
     request_stack.append(value)
 
@@ -331,28 +332,39 @@ def autowire_handler(sp_endpoint: ENDPOINT_TYPE) -> HANDLER_TYPE:
         for name, (depends_type, default, kind) in func_arg_spec(sp_endpoint).items():
             if kind == POSITIONAL_ONLY:
                 request_stack = get_request_stack(request)
+                request_data: REQUEST_STACK_VALUE
                 if not args and not request_stack:
-                    request_text = await request.text()
+                    request_data = await request.text()
                 elif not request_stack:
                     raise TypeError(
                         f'request stack is empty for param: {name}')
                 else:
-                    request_text = request_stack.pop()
+                    request_data = request_stack.pop()
                 if inspect.isclass(depends_type) and issubclass(depends_type, pydantic.BaseModel):
                     try:
-                        data = depends_type.model_validate_json(request_text)
-                        args.append(data)
+                        if isinstance(request_data, str):
+                            data_pydantic = depends_type.model_validate_json(
+                                request_data)
+                        else:
+                            data_pydantic = depends_type.model_validate(
+                                request_data)
+                        args.append(data_pydantic)
                     except pydantic.ValidationError as e:
                         raise rest_error(
                             HTTPBadRequest, {'message': f'invalid request body: {e}'})
                 else:
                     try:
-                        data = orjson.loads(request_text)
+                        if isinstance(request_data, str):
+                            data_json = orjson.loads(request_data)
+                        elif isinstance(request_data, pydantic.BaseModel):
+                            data_json = dict(request_data)
+                        else:
+                            data_json = request_data
                     except orjson.JSONDecodeError as e:
                         raise rest_error(
                             HTTPBadRequest, {'message': f'request body raise JSONDecodeError: {e}'})
                     try:
-                        args.append(typecast(data, depends_type))
+                        args.append(typecast(data_json, depends_type))
                     except Exception as e:
                         raise rest_error(
                             HTTPBadRequest, {'message': f'request body decoding error: {e}'})
