@@ -239,7 +239,7 @@ def test_func_arg_spec_basic():
     assert 'a' in spec and 'b' in spec and 'c' in spec
 
     # Check types
-    assert spec['a'][0] == Parameter.empty  # no type
+    assert spec['a'][0] == Any  # no type
     assert spec['b'][0] == int
     assert spec['c'][0] == float
 

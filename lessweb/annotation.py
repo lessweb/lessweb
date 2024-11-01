@@ -7,10 +7,12 @@ HTTP_METHOD_TYPE = Literal['GET', 'POST',
 class Endpoint:
     method: HTTP_METHOD_TYPE
     path: str
+    background: bool
 
-    def __init__(self, method: HTTP_METHOD_TYPE, path: str):
+    def __init__(self, method: HTTP_METHOD_TYPE, path: str, background: bool = False):
         self.method = method
         self.path = path
+        self.background = background
 
 
 class Get(Endpoint):
@@ -61,13 +63,13 @@ class DefaultFactory:
         self.factory_func = factory_func
 
 
-# class OnEvent:
-#     event: str
-#     is_async: bool
+class OnEvent:
+    event: str
+    background: bool
 
-#     def __init__(self, event: str, is_async: bool = True):
-#         self.event = event
-#         self.is_async = is_async
+    def __init__(self, event: str, background: bool = False):
+        self.event = event
+        self.background = background
 
 
 # class Html:

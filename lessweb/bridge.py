@@ -10,11 +10,14 @@ from typing import Any, Literal, Optional, Type, TypeVar
 import pydantic
 import toml
 from aiohttp.test_utils import make_mocked_request
-from aiohttp.web import AppKey, Application, Request, run_app
+from aiohttp.web import AppKey, Application, run_app
 from dotenv import find_dotenv, load_dotenv
 
-from .ioc import (APP_BRIDGE_KEY, Middleware, Module, Service, autowire,
-                  autowire_handler, autowire_module, get_endpoint_metas,
+from .ioc import (APP_BRIDGE_KEY, APP_EVENT_SUBSCRIBER_KEY, APP_ON_CLEANUP_KEY,
+                  APP_ON_SHUTDOWN_KEY, APP_ON_STARTUP_KEY, KEYWORD_ONLY,
+                  POSITIONAL_ONLY, Middleware, Module, Service, autowire,
+                  autowire_handler, autowire_module, func_arg_spec,
+                  get_endpoint_metas, get_event_subscriber_metas,
                   init_orjson_option)
 from .typecast import typecast
 from .utils import scan_import
@@ -68,6 +71,10 @@ class Bridge:
         self.config_file = config
 
         self.app[APP_BRIDGE_KEY] = self
+        self.app[APP_EVENT_SUBSCRIBER_KEY] = []
+        self.app[APP_ON_STARTUP_KEY] = []
+        self.app[APP_ON_CLEANUP_KEY] = []
+        self.app[APP_ON_SHUTDOWN_KEY] = []
         self.bootstrap_config = self._load_config()
         self._load_logger(self.bootstrap_config)
         self._load_orjson(self.bootstrap_config)
@@ -147,12 +154,9 @@ class Bridge:
         self.app[app_key] = result
         return result
 
-    def make_event_request(self, path: str, **kwargs) -> Request:
-        return make_mocked_request('POST', f'/{os.path.join("__event__", path)}', **kwargs, app=self.app)
-
     def scan(self, *packages) -> None:
         imported_modules = scan_import(packages)
-        mocked_request = self.make_event_request('/')
+        mocked_request = make_mocked_request('CONNECT', '/', app=self.app)
         for _, obj in imported_modules.items():
             if inspect.isclass(obj):
                 if issubclass(obj, Module):
@@ -161,17 +165,42 @@ class Bridge:
                     autowire(mocked_request, obj)
             elif inspect.isfunction(obj):
                 endpoint_metas = get_endpoint_metas(obj)
-                if endpoint_metas and not inspect.iscoroutinefunction(obj):
-                    raise TypeError(
-                        f'endpoint must be coroutine function: {obj}')
-                for endpoint_meta in endpoint_metas:
-                    self.app.router.add_route(
-                        method=endpoint_meta.method,
-                        path=endpoint_meta.path,
-                        handler=autowire_handler(obj),
-                    )
+                event_subscriber_metas = get_event_subscriber_metas(obj)
+                if endpoint_metas or event_subscriber_metas:
+                    for _, (depends_type, _, kind) in func_arg_spec(obj).items():
+                        if kind == POSITIONAL_ONLY or kind == KEYWORD_ONLY:
+                            continue
+                        elif inspect.isclass(depends_type) and issubclass(depends_type, Module):
+                            autowire_module(self.app, depends_type)
+                        else:
+                            autowire(mocked_request, depends_type)
+                if endpoint_metas:
+                    if not inspect.iscoroutinefunction(obj):
+                        raise TypeError(
+                            f'endpoint must be coroutine function: {obj}')
+                    for endpoint_meta in endpoint_metas:
+                        self.app.router.add_route(
+                            method=endpoint_meta.method,
+                            path=endpoint_meta.path,
+                            handler=autowire_handler(
+                                obj, background=endpoint_meta.background),
+                        )
+                if event_subscriber_metas:
+                    if not inspect.iscoroutinefunction(obj):
+                        raise TypeError(
+                            f'event subscriber must be coroutine function: {obj}')
+                    for event_subscriber_meta in event_subscriber_metas:
+                        self.app[APP_EVENT_SUBSCRIBER_KEY].append(
+                            (event_subscriber_meta,
+                             autowire_handler(obj, background=event_subscriber_meta.background)))
             else:
                 pass
+        for signal_handler in self.app[APP_ON_STARTUP_KEY]:
+            self.app.on_startup.append(signal_handler)
+        for signal_handler in reversed(self.app[APP_ON_CLEANUP_KEY]):
+            self.app.on_cleanup.append(signal_handler)
+        for signal_handler in reversed(self.app[APP_ON_SHUTDOWN_KEY]):
+            self.app.on_shutdown.append(signal_handler)
 
     def run_app(self, **kwargs) -> None:
         run_app(

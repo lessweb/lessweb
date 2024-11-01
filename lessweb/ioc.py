@@ -8,9 +8,10 @@ import orjson
 import pydantic
 from aiohttp.typedefs import LooseHeaders
 from aiohttp.web import (Application, HTTPBadRequest, HTTPError, Request,
-                         Response, middleware)
+                         Response, StreamResponse, middleware)
+from aiojobs.aiohttp import atomic
 
-from lessweb.annotation import DefaultFactory, Endpoint
+from lessweb.annotation import DefaultFactory, Endpoint, OnEvent
 from lessweb.typecast import typecast
 from lessweb.utils import absolute_ref
 
@@ -24,6 +25,10 @@ KEYWORD_ONLY = 3
 
 REQUEST_STACK_KEY = 'lessweb.request_stack'
 APP_BRIDGE_KEY = 'lessweb.bridge'
+APP_EVENT_SUBSCRIBER_KEY = 'lessweb.event_subscriber'
+APP_ON_STARTUP_KEY = 'lessweb.on_startup'
+APP_ON_CLEANUP_KEY = 'lessweb.on_cleanup'
+APP_ON_SHUTDOWN_KEY = 'lessweb.on_shutdown'
 
 
 class Module:
@@ -109,7 +114,7 @@ def func_arg_spec(fn) -> Dict[str, Tuple]:
     for name, param in inspect.signature(fn).parameters.items():
         arg_spec[name] = (
             annotated_origin(
-                param.annotation),  # otherwise => inspect.Signature.empty
+                Any if param.annotation is inspect.Parameter.empty else param.annotation),
             param.default,  # otherwise => inspect.Signature.empty
             param.kind  # 0=POSITIONAL_ONLY 1=POSITIONAL_OR_KEYWORD 2=VAR_POSITIONAL 3=KEYWORD_ONLY 4=VAR_KEYWORD
         )
@@ -214,9 +219,9 @@ def autowire_module(app: Application, cls: Type[T]) -> T:
     for _, depends_type in depends_on:
         args.append(autowire_module(app, depends_type))
     app[ref] = singleton = cls(*args)
-    app.on_startup.append(singleton.on_startup)
-    app.on_cleanup.insert(0, singleton.on_cleanup)
-    app.on_shutdown.insert(0, singleton.on_shutdown)
+    app[APP_ON_STARTUP_KEY].append(singleton.on_startup)
+    app[APP_ON_CLEANUP_KEY].append(singleton.on_cleanup)
+    app[APP_ON_SHUTDOWN_KEY].append(singleton.on_shutdown)
     return singleton
 
 
@@ -320,11 +325,11 @@ def push_request_stack(request: Request, value: REQUEST_STACK_VALUE):
     request_stack.append(value)
 
 
-def autowire_handler(sp_endpoint: ENDPOINT_TYPE) -> HANDLER_TYPE:
+def autowire_handler(sp_endpoint: ENDPOINT_TYPE, background: bool = False) -> HANDLER_TYPE:
     """
     创建handler的工厂函数，用于aiohttp的add_route
     """
-    async def aio_route_endpoint(request: Request) -> Response:
+    async def aio_route_endpoint(request: Request) -> StreamResponse:
         args: list = []
         kwargs: Dict[str, Any] = {}
         arg_annotated_metas = func_arg_annotated_metas(sp_endpoint)
@@ -391,17 +396,29 @@ def autowire_handler(sp_endpoint: ENDPOINT_TYPE) -> HANDLER_TYPE:
             else:
                 kwargs[name] = autowire(request, depends_type)
         result = await sp_endpoint(*args, **kwargs)
+        if isinstance(result, StreamResponse):
+            return result
         if inspect.isclass(response_type) and issubclass(response_type, pydantic.BaseModel):
             return rest_response(response_type.model_validate(result))
-        if isinstance(result, (dict, list)) or is_dataclass(result) or isinstance(result, pydantic.BaseModel):
+        elif isinstance(result, (dict, list)) or is_dataclass(result) or isinstance(result, pydantic.BaseModel):
             return rest_response(result)
         elif result is None:
             return Response(status=204)
         else:
             return Response(text=str(result), content_type='text/plain')
-    return aio_route_endpoint
+
+    if not background:
+        return aio_route_endpoint
+    else:
+        # https://docs.aiohttp.org/en/stable/web_advanced.html#web-handler-cancellation
+        return atomic(aio_route_endpoint)
 
 
 def get_endpoint_metas(fn) -> list[Endpoint]:
     _, func_metas = func_annotated_metas(fn)
     return [meta for meta in func_metas if isinstance(meta, Endpoint)]
+
+
+def get_event_subscriber_metas(cls) -> list[OnEvent]:
+    _, cls_metas = func_annotated_metas(cls)
+    return [meta for meta in cls_metas if isinstance(meta, OnEvent)]
