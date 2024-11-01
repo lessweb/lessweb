@@ -3,10 +3,11 @@ import os
 from typing import Any, Type
 
 from aiohttp.test_utils import make_mocked_request
-from aiohttp.web import Application, StreamResponse, UrlDispatcher
+from aiohttp.web import Application, Response, StreamResponse, UrlDispatcher
+from aiojobs.aiohttp import spawn as aiojobs_spawn
 
 from .annotation import OnEvent
-from .ioc import APP_EVENT_SUBSCRIBER_KEY, Module
+from .ioc import APP_EVENT_SUBSCRIBER_KEY, BACKGROUND_ANNOTAION_KEY, Module
 
 EVENT_PATH_PREFIX = '/__event__'
 
@@ -58,6 +59,11 @@ class EventEmitter(Module):
         match_info = await self.router.resolve(request)
         match_info.add_app(self.app)
         request._match_info = match_info
+        is_background = getattr(
+            match_info.handler, BACKGROUND_ANNOTAION_KEY, False)
         handler = make_event_handler(self.app.middlewares, match_info.handler)
-        resp = await handler(request)
-        return resp
+        if is_background:
+            await aiojobs_spawn(request, handler(request))
+            return Response(status=204)
+        else:
+            return await handler(request)

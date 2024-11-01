@@ -11,6 +11,7 @@ import pydantic
 import toml
 from aiohttp.test_utils import make_mocked_request
 from aiohttp.web import AppKey, Application, run_app
+from aiojobs.aiohttp import setup as aiojobs_setup
 from dotenv import find_dotenv, load_dotenv
 
 from .ioc import (APP_BRIDGE_KEY, APP_EVENT_SUBSCRIBER_KEY, APP_ON_CLEANUP_KEY,
@@ -182,8 +183,7 @@ class Bridge:
                         self.app.router.add_route(
                             method=endpoint_meta.method,
                             path=endpoint_meta.path,
-                            handler=autowire_handler(
-                                obj, background=endpoint_meta.background),
+                            handler=autowire_handler(obj),
                         )
                 if event_subscriber_metas:
                     if not inspect.iscoroutinefunction(obj):
@@ -195,6 +195,7 @@ class Bridge:
                              autowire_handler(obj, background=event_subscriber_meta.background)))
             else:
                 pass
+        aiojobs_setup(self.app)
         for signal_handler in self.app[APP_ON_STARTUP_KEY]:
             self.app.on_startup.append(signal_handler)
         for signal_handler in reversed(self.app[APP_ON_CLEANUP_KEY]):

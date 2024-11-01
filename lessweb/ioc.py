@@ -9,7 +9,6 @@ import pydantic
 from aiohttp.typedefs import LooseHeaders
 from aiohttp.web import (Application, HTTPBadRequest, HTTPError, Request,
                          Response, StreamResponse, middleware)
-from aiojobs.aiohttp import atomic
 
 from lessweb.annotation import DefaultFactory, Endpoint, OnEvent
 from lessweb.typecast import typecast
@@ -29,6 +28,7 @@ APP_EVENT_SUBSCRIBER_KEY = 'lessweb.event_subscriber'
 APP_ON_STARTUP_KEY = 'lessweb.on_startup'
 APP_ON_CLEANUP_KEY = 'lessweb.on_cleanup'
 APP_ON_SHUTDOWN_KEY = 'lessweb.on_shutdown'
+BACKGROUND_ANNOTAION_KEY = 'lessweb.background'
 
 
 class Module:
@@ -407,11 +407,9 @@ def autowire_handler(sp_endpoint: ENDPOINT_TYPE, background: bool = False) -> HA
         else:
             return Response(text=str(result), content_type='text/plain')
 
-    if not background:
-        return aio_route_endpoint
-    else:
-        # https://docs.aiohttp.org/en/stable/web_advanced.html#web-handler-cancellation
-        return atomic(aio_route_endpoint)
+    if background:
+        setattr(aio_route_endpoint, BACKGROUND_ANNOTAION_KEY, True)
+    return aio_route_endpoint
 
 
 def get_endpoint_metas(fn) -> list[Endpoint]:

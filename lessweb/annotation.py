@@ -7,12 +7,10 @@ HTTP_METHOD_TYPE = Literal['GET', 'POST',
 class Endpoint:
     method: HTTP_METHOD_TYPE
     path: str
-    background: bool
 
-    def __init__(self, method: HTTP_METHOD_TYPE, path: str, background: bool = False):
+    def __init__(self, method: HTTP_METHOD_TYPE, path: str):
         self.method = method
         self.path = path
-        self.background = background
 
 
 class Get(Endpoint):

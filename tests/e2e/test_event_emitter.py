@@ -25,7 +25,7 @@ class AddAsterisk(Middleware):
 
 
 async def handle_test_event(request: Request) -> Annotated[
-        dict, OnEvent('test_event', background=True)]:
+        dict, OnEvent('test_event')]:
     payload = await request.json()
     return {'message': f"Received: {payload['message']}"}
 
@@ -39,7 +39,6 @@ async def trigger_test_event(emitter: EventEmitter) -> Annotated[StreamResponse,
 @pytest.mark.asyncio
 async def test_event_emitter(aiohttp_client):
     app = web.Application()
-    setup_aiojobs(app)
     bridge = Bridge(app=app)
     bridge.scan(handle_test_event, trigger_test_event,
                 AddAsterisk, AddExclamation)
