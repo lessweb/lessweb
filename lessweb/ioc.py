@@ -10,7 +10,7 @@ from aiohttp.typedefs import LooseHeaders
 from aiohttp.web import (Application, HTTPBadRequest, HTTPError, Request,
                          Response, StreamResponse, middleware)
 
-from lessweb.annotation import DefaultFactory, Endpoint, OnEvent
+from lessweb.annotation import DefaultFactory, Endpoint, OnEvent, TextResponse
 from lessweb.typecast import typecast
 from lessweb.utils import absolute_ref
 
@@ -405,7 +405,11 @@ def autowire_handler(sp_endpoint: ENDPOINT_TYPE, background: bool = False) -> HA
         elif result is None:
             return Response(status=204)
         else:
-            return Response(text=str(result), content_type='text/plain')
+            text_response_metas = get_text_response_metas(sp_endpoint)
+            if text_response_metas:
+                return Response(text=str(result), content_type=text_response_metas[0].content_type, charset='utf-8')
+            else:
+                return Response(text=str(result), content_type='text/plain', charset='utf-8')
 
     if background:
         setattr(aio_route_endpoint, BACKGROUND_ANNOTAION_KEY, True)
@@ -417,6 +421,11 @@ def get_endpoint_metas(fn) -> list[Endpoint]:
     return [meta for meta in func_metas if isinstance(meta, Endpoint)]
 
 
-def get_event_subscriber_metas(cls) -> list[OnEvent]:
-    _, cls_metas = func_annotated_metas(cls)
-    return [meta for meta in cls_metas if isinstance(meta, OnEvent)]
+def get_event_subscriber_metas(fn) -> list[OnEvent]:
+    _, func_metas = func_annotated_metas(fn)
+    return [meta for meta in func_metas if isinstance(meta, OnEvent)]
+
+
+def get_text_response_metas(fn) -> list[TextResponse]:
+    _, func_metas = func_annotated_metas(fn)
+    return [meta for meta in func_metas if isinstance(meta, TextResponse)]

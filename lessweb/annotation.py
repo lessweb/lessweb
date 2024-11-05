@@ -70,9 +70,18 @@ class OnEvent:
         self.background = background
 
 
-# class Html:
-#     pass
+class TextResponse:
+    content_type: str
+
+    def __init__(self, content_type: str):
+        self.content_type = content_type
 
 
-# class PlainText:
-#     pass
+class Html(TextResponse):
+    def __init__(self):
+        super().__init__('text/html')
+
+
+class PlainText(TextResponse):
+    def __init__(self):
+        super().__init__('text/plain')
