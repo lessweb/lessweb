@@ -428,4 +428,10 @@ def get_event_subscriber_metas(fn) -> list[OnEvent]:
 
 def get_text_response_metas(fn) -> list[TextResponse]:
     _, func_metas = func_annotated_metas(fn)
-    return [meta for meta in func_metas if isinstance(meta, TextResponse)]
+    result = []
+    for meta in func_metas:
+        if isinstance(meta, TextResponse):
+            result.append(meta)
+        elif inspect.isclass(meta) and issubclass(meta, TextResponse):
+            result.append(meta())
+    return result
