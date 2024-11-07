@@ -1,5 +1,3 @@
-from .annotation import (DefaultFactory, Delete, Endpoint, Get, OnEvent, Patch,
-                         Post, Put)
 from .bridge import Bridge
 from .event import EventEmitter
 from .ioc import (Middleware, Module, Service, autowire, get_request_stack,

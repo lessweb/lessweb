@@ -5,8 +5,9 @@ from aiohttp import web
 from aiohttp.web import Request, StreamResponse
 from aiojobs.aiohttp import setup as setup_aiojobs
 
-from lessweb import Bridge, EventEmitter
+from lessweb import Bridge
 from lessweb.annotation import Get, OnEvent
+from lessweb.event import EventEmitter
 from lessweb.ioc import Middleware, rest_response
 
 

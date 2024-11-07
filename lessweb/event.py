@@ -35,6 +35,7 @@ class EventEmitter(Module):
     router: UrlDispatcher
 
     async def on_startup(self, app: Application) -> None:
+        self.app = app
         self.build_router(app)
 
     def build_router(self, app: Application) -> None:
@@ -42,9 +43,12 @@ class EventEmitter(Module):
         self.router = UrlDispatcher()
         for meta, handler in self.app[APP_EVENT_SUBSCRIBER_KEY]:
             if isinstance(meta, self.subscriber_annotation):
+                if meta.event.startswith('/'):
+                    raise ValueError('event path must not start with ‘/’')
+                event_path = os.path.join(EVENT_PATH_PREFIX, meta.event)
                 self.router.add_route(
                     method='POST',
-                    path=os.path.join(EVENT_PATH_PREFIX, meta.event),
+                    path=event_path,
                     handler=handler,
                 )
 
@@ -55,6 +59,7 @@ class EventEmitter(Module):
             headers={'Content-Type': 'application/json'},
             app=self.app
         )
+        print('emit:', event_path, payload)
         request._read_bytes = json.dumps(payload).encode()
         match_info = await self.router.resolve(request)
         match_info.add_app(self.app)
