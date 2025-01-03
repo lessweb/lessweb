@@ -23,6 +23,7 @@ KEYWORD_ONLY = 3
 
 
 REQUEST_STACK_KEY = 'lessweb.request_stack'
+APP_CONFIG_KEY = 'lessweb.config'
 APP_BRIDGE_KEY = 'lessweb.bridge'
 APP_EVENT_SUBSCRIBER_KEY = 'lessweb.event_subscriber'
 APP_ON_STARTUP_KEY = 'lessweb.on_startup'
@@ -52,7 +53,7 @@ class Module:
         """
         Example of override:
         >>> def load_config(self, app: Application) -> Annotated[MyAppConfig, 'myapp']:
-        ...   return app.load_module_config('myapp', MyAppConfig)
+        ...   return lessweb.load_module_config(app, 'myapp', MyAppConfig)
         """
         pass
 
@@ -94,6 +95,10 @@ def annotated_origin(anno) -> Any:
 
 def func_arg_spec(fn) -> Dict[str, Tuple]:
     """
+    获取函数参数的类型、默认值和参数类型
+     - 如果参数没有指定类型，则返回Any
+     - 如果参数的类型是Annotated，则返回Annotated的原始类型
+
     >>> def foo(a, /, b, c=2, *d, e, f=3, **g):
     ...   pass
     ...

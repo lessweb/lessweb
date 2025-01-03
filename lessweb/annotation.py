@@ -73,7 +73,7 @@ class OnEvent:
 class TextResponse:
     content_type: str
 
-    def __init__(self, content_type: str):
+    def __init__(self, content_type: str = 'text/plain'):
         self.content_type = content_type
 
 

@@ -1,6 +1,8 @@
 
 from aiohttp.web import Response
-from bullmq import Queue, Worker
+from bullmq import Job, Queue, Worker
+from bullmq.queue import JobOptions
+from frozendict import frozendict
 
 from lessweb.annotation import OnEvent
 from lessweb.event import EventEmitter
@@ -42,6 +44,9 @@ class BullMQPlugin(EventEmitter):
         if isinstance(response, Response):
             return response.text
         return str(response)
+
+    async def add_job(self, name: str, data, opts: JobOptions = frozendict()) -> Job:
+        return await self.queue.add(name, data, opts)
 
 
 class Processor(OnEvent):

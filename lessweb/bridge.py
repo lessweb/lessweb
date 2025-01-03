@@ -14,10 +14,10 @@ from aiohttp.web import AppKey, Application, run_app
 from aiojobs.aiohttp import setup as aiojobs_setup
 from dotenv import find_dotenv, load_dotenv
 
-from .ioc import (APP_BRIDGE_KEY, APP_EVENT_SUBSCRIBER_KEY, APP_ON_CLEANUP_KEY,
-                  APP_ON_SHUTDOWN_KEY, APP_ON_STARTUP_KEY, KEYWORD_ONLY,
-                  POSITIONAL_ONLY, Middleware, Module, Service, autowire,
-                  autowire_handler, autowire_module, func_arg_spec,
+from .ioc import (APP_BRIDGE_KEY, APP_CONFIG_KEY, APP_EVENT_SUBSCRIBER_KEY,
+                  APP_ON_CLEANUP_KEY, APP_ON_SHUTDOWN_KEY, APP_ON_STARTUP_KEY,
+                  KEYWORD_ONLY, POSITIONAL_ONLY, Middleware, Module, Service,
+                  autowire, autowire_handler, autowire_module, func_arg_spec,
                   get_endpoint_metas, get_event_subscriber_metas,
                   init_orjson_option)
 from .typecast import typecast
@@ -54,6 +54,21 @@ class LesswebBootstrapConfig(pydantic.BaseModel):
 T = TypeVar('T')
 
 
+def load_module_config(app: Application, module_config_key: str, module_config_cls: Type[T]) -> T:
+    module_config = app[APP_CONFIG_KEY].get(module_config_key, {})
+    app_key = AppKey(f'{module_config_key}.config', module_config_cls)
+    if app_key in app:
+        return app[app_key]
+    result: T
+    if inspect.isclass(module_config_cls) and issubclass(module_config_cls, pydantic.BaseModel):
+        result = module_config_cls.model_validate(
+            module_config)  # type: ignore
+    else:
+        result = typecast(module_config, module_config_cls)
+    app[app_key] = result
+    return result
+
+
 class Bridge:
     app: Application
     config_file: Optional[str]
@@ -88,7 +103,8 @@ class Bridge:
         else:
             load_dotenv()
         self.config = self._load_config_with_env()
-        return self.load_module_config('lessweb', LesswebBootstrapConfig)
+        self.app[APP_CONFIG_KEY] = self.config
+        return load_module_config(self.app, 'lessweb', LesswebBootstrapConfig)
 
     def _load_config_with_env(self) -> dict[str, Any]:
         if self.config_file:
@@ -140,20 +156,6 @@ class Bridge:
 
     def _load_orjson(self, config: LesswebBootstrapConfig) -> None:
         init_orjson_option(config.orjson_option)
-
-    def load_module_config(self, module_config_key: str, module_config_cls: Type[T]) -> T:
-        module_config = self.config.get(module_config_key, {})
-        app_key = AppKey(f'{module_config_key}.config', module_config_cls)
-        if app_key in self.app:
-            return self.app[app_key]
-        result: T
-        if inspect.isclass(module_config_cls) and issubclass(module_config_cls, pydantic.BaseModel):
-            result = module_config_cls.model_validate(
-                module_config)  # type: ignore
-        else:
-            result = typecast(module_config, module_config_cls)
-        self.app[app_key] = result
-        return result
 
     def scan(self, *packages) -> None:
         imported_modules = scan_import(packages)
