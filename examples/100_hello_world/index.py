@@ -1,14 +1,16 @@
-from lessweb import Bridge, get_mapping
+from typing import Annotated
+
+from lessweb import Bridge
+from lessweb.annotation import Get
 
 
-@get_mapping('/')
-async def hello():
+async def hello() -> Annotated[dict, Get('/')]:
     return {'message': 'Hello, world!'}
 
 
 def main():
     bridge = Bridge()
-    bridge.add_route(hello)
+    bridge.scan(hello)
     bridge.run_app()
 
 

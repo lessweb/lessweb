@@ -195,10 +195,11 @@ def get_depends_on(fn) -> list:
     return depends_on
 
 
-def _make_middleware(bound_method: Callable) -> Callable:
+def make_middleware(cls: Type[Middleware]) -> Callable:
     @middleware
     async def middleware_func(request, handler):
-        return await bound_method(request, handler)
+        singleton = autowire(request, cls)
+        return await singleton.on_request(request, handler)
     return middleware_func
 
 
@@ -258,8 +259,6 @@ def autowire(request: Request, cls: Type[U]) -> U:
         else:
             args.append(autowire(request, depends_type))
     request[ref] = singleton = cls(*args)
-    if isinstance(singleton, Middleware):
-        request.app.middlewares.append(_make_middleware(singleton.on_request))
     return singleton  # type: ignore
 
 

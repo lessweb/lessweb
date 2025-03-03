@@ -9,17 +9,15 @@ from typing import Any, Literal, Optional, Type, TypeVar
 
 import pydantic
 import toml
-from aiohttp.test_utils import make_mocked_request
 from aiohttp.web import AppKey, Application, run_app
 from aiojobs.aiohttp import setup as aiojobs_setup
 from dotenv import find_dotenv, load_dotenv
 
 from .ioc import (APP_BRIDGE_KEY, APP_CONFIG_KEY, APP_EVENT_SUBSCRIBER_KEY,
                   APP_ON_CLEANUP_KEY, APP_ON_SHUTDOWN_KEY, APP_ON_STARTUP_KEY,
-                  KEYWORD_ONLY, POSITIONAL_ONLY, Middleware, Module, Service,
-                  autowire, autowire_handler, autowire_module, func_arg_spec,
+                  Middleware, Module, autowire_handler, autowire_module,
                   get_endpoint_metas, get_event_subscriber_metas,
-                  init_orjson_option)
+                  init_orjson_option, make_middleware)
 from .typecast import typecast
 from .utils import scan_import
 
@@ -159,24 +157,15 @@ class Bridge:
 
     def scan(self, *packages) -> None:
         imported_modules = scan_import(packages)
-        mocked_request = make_mocked_request('CONNECT', '/', app=self.app)
         for _, obj in imported_modules.items():
             if inspect.isclass(obj):
                 if issubclass(obj, Module):
                     autowire_module(self.app, obj)
-                elif issubclass(obj, (Middleware, Service)):
-                    autowire(mocked_request, obj)
+                elif issubclass(obj, Middleware):
+                    self.app.middlewares.append(make_middleware(obj))
             elif inspect.isfunction(obj):
                 endpoint_metas = get_endpoint_metas(obj)
                 event_subscriber_metas = get_event_subscriber_metas(obj)
-                if endpoint_metas or event_subscriber_metas:
-                    for _, (depends_type, _, kind) in func_arg_spec(obj).items():
-                        if kind == POSITIONAL_ONLY or kind == KEYWORD_ONLY:
-                            continue
-                        elif inspect.isclass(depends_type) and issubclass(depends_type, Module):
-                            autowire_module(self.app, depends_type)
-                        else:
-                            autowire(mocked_request, depends_type)
                 if endpoint_metas:
                     if not inspect.iscoroutinefunction(obj):
                         raise TypeError(
