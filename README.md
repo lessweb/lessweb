@@ -1,34 +1,46 @@
 # lessweb
->「嘞是web」
 
-Lessweb is an extremely easy-to-use python web framework with the following goals.
+Lessweb is a ready-to-use, production-grade Python web framework with the following goals:
 
-* Simple and efficient: based on the aiohttp library IOC capabilities, native support for configuration loading and logging settings to meet production-level development requirements
-* Pythonic: support for the latest python version and the latest python syntax
+* Ready-to-use: Easily parse configuration files, set up logging with ease, and dynamically override configuration items using environ variables.
+* Production-grade: Built on the aiohttp ecosystem and boast powerful IOC capabilities.
+* Pythonic: Support for the latest python version and the latest python syntax.
 
 ## Install lessweb
 
-To install the latest lessweb for Python 3, please run:
+To install the latest lessweb for Python≥3.10, please run:
 
 ```shell
-pip3 install lessweb
+pip install lessweb
 ```
 
-## Hello, world!
+## Dependencies
 
-Save the code below in file `index.py`:
+- [aiohttp](https://github.com/aio-libs/aiohttp)
+- [orjson](https://github.com/ijl/orjson)
+- [pydantic](https://github.com/pydantic/pydantic)
+- [python-dotenv](https://github.com/theskumar/python-dotenv)
+
+## A Simple Example
+
+Save the code below in file `main.py`:
 
 ```python
-from lessweb import Bridge, get_mapping
+from typing import Annotated
 
-@get_mapping('/')
-async def hello():
-    return {'message': 'Hello, world!'}
+from lessweb import Bridge
+from lessweb.annotation import Get
+
+
+async def hello(*, who: str = 'world') -> Annotated[dict, Get('/')]:
+    return {'message': f'Hello, {who}!'}
+
 
 def main():
     bridge = Bridge()
-    bridge.add_route(hello)
+    bridge.scan(hello)
     bridge.run_app()
+
 
 if __name__ == '__main__':
     main()
@@ -36,31 +48,27 @@ if __name__ == '__main__':
 
 Start the application with the command below, it listens on `http://localhost:8080/` by default.
 
-```
-python3 index.py
-```
-
-## Setting port
-
-Save the code below in file `config.toml`:
-
-```toml
-[bootstrap]
-port = 80
+```shell
+python main.py
 ```
 
-Then change the code to:
+### Check it
 
-```python
-def main():
-    bridge = Bridge(config='config.toml')
-    bridge.add_route(hello)
-    bridge.run_app()
+Open your browser at `http://localhost:8080`
+
+You will see the JSON response as:
+
+```json
+{"message":"Hello, world!"}
 ```
 
-Once you run it, you can access `http://localhost/` with your browser.
+Open your browser at `http://127.0.0.1:8000?who=John`
 
-You can also use environment variables to override the configuration file's contents, e.g. run `BOOTSTRAP_PORT=8081 python3 index.py`, then it listens on `http://localhost:8081`.
+You will see the JSON response as:
+
+```json
+{"message":"Hello, John!"}
+```
 
 ## License
 
@@ -70,8 +78,3 @@ Lessweb is offered under the Apache 2 license.
 
 The latest developer version is available in a GitHub repository: https://github.com/lessweb/lessweb
 
-## Cookbook
-### https://github.com/lessweb/lessweb/wiki
-
-## Cookbook【中文】：
-### http://www.lessweb.cn

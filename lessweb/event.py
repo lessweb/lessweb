@@ -27,9 +27,6 @@ def make_event_handler(middlewares, handler):
 
 
 class EventEmitter(Module):
-    """
-    事件发射器
-    """
     app: Application
     subscriber_annotation: Type[OnEvent] = OnEvent
     router: UrlDispatcher

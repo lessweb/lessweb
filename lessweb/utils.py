@@ -17,10 +17,14 @@ def list_dirs(path: str) -> list[str]:
     return [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
 
 
-def is_first_touch(ref: str, ref_set: set) -> bool:
-    if ref in ref_set:
+def is_first_touch(key: str, cache: set) -> bool:
+    """
+    Return True if key is first seen, else False.
+    Given a cache set, add the key to it if not already in it.
+    """
+    if key in cache:
         return False
-    ref_set.add(ref)
+    cache.add(key)
     return True
 
 

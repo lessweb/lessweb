@@ -38,18 +38,19 @@ class Patch(Endpoint):
         super().__init__('PATCH', path)
 
 
+# TODO:
 # class Path:
 #     pass
 
-
+# TODO:
 # class Query:
 #     pass
 
-
+# TODO:
 # class Header:
 #     pass
 
-
+# TODO:
 # class Cookie:
 #     pass
 

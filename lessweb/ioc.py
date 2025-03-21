@@ -234,8 +234,7 @@ U = TypeVar('U')
 
 def autowire(request: Request, cls: Type[U]) -> U:
     """
-    请求级别单例中间件注入。
-    副作用：将cls的实例注册到request中，同时注册到app的middlewares
+    Request-level dependency injection, automatically instantiating Middleware or Service objects.
     """
     assert inspect.isclass(cls), f'Can only autowire normal class: {cls}'
     if cls is Request:
@@ -293,9 +292,6 @@ def rest_response(
 
 
 def get_request_stack(request: Request) -> list[Union[str, bytes]]:
-    """
-    用于实现请求级别对于requestBody的统一处理。
-    """
     if (request_stack := request.get(REQUEST_STACK_KEY)) and isinstance(request_stack, list):
         return request_stack
     request[REQUEST_STACK_KEY] = []
@@ -311,7 +307,18 @@ def push_request_stack(request: Request, value: Union[str, bytes]):
 
 def autowire_handler(sp_endpoint: ENDPOINT_TYPE, background: bool = False) -> HANDLER_TYPE:
     """
-    创建handler的工厂函数，用于aiohttp的add_route
+    Decorate an async function to make it a handler, which can be used as aiohttp's route.
+    This function will be called with request as the first argument.
+    The other arguments will be passed in according to func_arg_spec of the function.
+    If the argument is a positional-only argument, it will be passed in from the request body.
+    If the argument is a keyword-only argument, it will be passed in from the query string.
+    If the argument is a Module, it will be passed in by autowire_module.
+    If the argument is a Service or Middleware, it will be passed in by autowire.
+    If the function returns a StreamResponse, it will be returned directly.
+    If the function returns a dict or list, it will be returned as a json response.
+    If the function returns a JSON-serializable object, such as a pydantic.BaseModel, it will be validated and returned as a json response.
+    If the function returns None, it will be returned as a 204 response.
+    If the function returns a string, it will be returned as a text response.
     """
     async def aio_route_endpoint(request: Request) -> StreamResponse:
         args: list = []

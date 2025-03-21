@@ -4,8 +4,8 @@ from lessweb import Bridge
 from lessweb.annotation import Get
 
 
-async def hello() -> Annotated[dict, Get('/')]:
-    return {'message': 'Hello, world!'}
+async def hello(*, who: str = 'world') -> Annotated[dict, Get('/')]:
+    return {'message': f'Hello, {who}!'}
 
 
 def main():
