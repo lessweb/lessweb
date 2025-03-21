@@ -2,18 +2,14 @@ import csv
 import datetime
 import enum
 import inspect
-import json
-import re
-import sys
-from typing import (Any, Dict, List, Literal, NewType, Type, Union,
-                    get_type_hints)
-from uuid import UUID
+from typing import (Any, Dict, List, Literal, NewType, Type, TypeGuard,
+                    TypeVar, Union, get_type_hints)
 
+import orjson
+import pydantic
 import typing_inspect
 
-
-class TypeCastError(Exception):
-    pass
+T = TypeVar('T')
 
 
 NoneType = type(None)
@@ -22,34 +18,25 @@ NoneType = type(None)
 classname_dict: Dict[str, Type] = {}
 
 
-def parse_csv(csv_text):
+def _pydantic_encoder(obj):
+    if isinstance(obj, pydantic.BaseModel):
+        return obj.model_dump()
+    raise TypeError
+
+
+def parse_csv(csv_text: str) -> List[str]:
+    """
+    Parse a single line of CSV text into a list of strings.
+
+    :param csv_text: a single line of CSV text
+    :return: a list of strings
+    """
     return list(csv.reader([csv_text]))[0]
-
-
-def isclasses(*cls_list) -> bool:
-    """
-    直接用issubclass()会抛异常，项目中需要用如下方式判断是否子类：if isclasses(A, B) and issubclass(A, B): ...
-    """
-    return all(inspect.isclass(cls) for cls in cls_list)
-
-
-def issubclass_safe(x, tp_tuple) -> bool:
-    try:
-        return issubclass(x, tp_tuple)
-    except:
-        return False
-
-
-def isinstance_safe(x, tp_tuple) -> bool:
-    try:
-        return tp_tuple is Any or tp_tuple is inspect.Signature.empty or isinstance(x, tp_tuple)
-    except:
-        return False
 
 
 def future_typed_dict_keys(tp):
     """
-    由于typing_inspect.typed_dict_keys()在alpine上有bug，只能自实现代替版本
+    Due to a bug with typing_inspect.typed_dict_keys() on Alpine, we had to implement our own version as a workaround.
     """
     try:
         if issubclass(tp, dict):
@@ -61,7 +48,7 @@ def future_typed_dict_keys(tp):
 
 
 def is_typeddict(tp) -> bool:
-    return issubclass_safe(tp, dict) and future_typed_dict_keys(tp)
+    return inspect.isclass(tp) and issubclass(tp, dict) and future_typed_dict_keys(tp)
 
 
 def inspect_type(tp):
@@ -81,7 +68,7 @@ def inspect_type(tp):
     inspect_type(cls) => (cls,)
     inspect_type(_else_) => NotImplementedError
     """
-    if isinstance_safe(tp, str):
+    if isinstance(tp, str):
         tp = classname_dict[tp]
     tp_origin = typing_inspect.get_origin(tp)
     tp_args = typing_inspect.get_args(tp)
@@ -101,8 +88,17 @@ def inspect_type(tp):
     raise NotImplementedError(f'cannot inspect type {tp=}')
 
 
-def is_list_type(tp):
+def is_list_type(tp) -> TypeGuard[Type[list]]:
     return tp is list or typing_inspect.get_origin(tp) is list
+
+
+def literal_to_str(data) -> str:
+    if isinstance(data, enum.Enum):
+        return data.name
+    elif isinstance(data, (datetime.datetime, datetime.date, datetime.time)):
+        return data.isoformat()
+    else:
+        return str(data)
 
 
 def semi_json_schema_type(tp):
@@ -145,180 +141,152 @@ def semi_json_schema_type(tp):
         return {'type': tp}
 
 
-def typecast(data, tp):
-    if isinstance_safe(tp, str):
-        if tp not in classname_dict:
-            raise TypeCastError(
-                f'typename {tp=} is not valid ref')  # 5xx Error in fact
-        else:
-            tp = classname_dict[tp]
-    type_inspect_seed = inspect_type(tp)
-    if type_inspect_seed[0] == Union:
-        if len(type_inspect_seed) != 2 or not type_inspect_seed[1]:
-            raise TypeCastError(f'{tp=} is empty')  # 5xx Error in fact
-        for item in type_inspect_seed[1]:
+class TypeCast:
+    ORJSON_OPTION = 0
+
+    @classmethod
+    def init_orjson_option(self, option_text: str) -> None:
+        if option_text:
+            for option_word in option_text.split(','):
+                assert hasattr(orjson, f'OPT_{option_word}')
+                option_flag = getattr(orjson, f'OPT_{option_word}')
+                self.ORJSON_OPTION |= option_flag
+
+    @classmethod
+    def dumps(self, data: Any) -> bytes:
+        return orjson.dumps(
+            data, option=self.ORJSON_OPTION, default=_pydantic_encoder)
+
+    @classmethod
+    def validate_json(self, data: Union[str, bytes], tp: Type[T]) -> T:
+        """
+        Validate data as json to type T.
+
+        Supported type T:
+            - list[pydantic.BaseModel]
+            - pydantic.BaseModel
+
+        The validation process is different according to the type of T:
+            - If T is list[pydantic.BaseModel], the validation is done by validate the list items one by one.
+            - If T is pydantic.BaseModel, the validation is done by pydantic's model_validate_json method.
+
+        Raises:
+            ValueError: if the data cannot be parsed to the given type (4xx Error for Frontend)
+            TypeError: if the given type is not supported (5xx Error for Frontend)
+        """
+        if is_list_type(tp):
             try:
-                return typecast(data, item)
-            except:
-                continue
-        raise TypeCastError(f'{data=} is not any member of {tp=}')
-    elif type_inspect_seed[0] == Literal:
-        if len(type_inspect_seed) != 2 or not type_inspect_seed[1]:
-            raise TypeCastError(f'{tp=} is empty')  # 5xx Error in fact
-        for item in type_inspect_seed[1]:
-            if item == data:
-                return data
-        raise TypeCastError(f'{data=} is not member of {tp=}')
-    elif type_inspect_seed[0] == NewType:
-        return typecast(data, type_inspect_seed[1])
-    if isinstance_safe(data, tp):
-        return data
-    elif issubclass_safe(tp, enum.Enum):
-        return tp(data)
-    elif issubclass_safe(tp, datetime.datetime):
-        return datetime.datetime.fromisoformat(data)
-    elif issubclass_safe(tp, datetime.date):
-        return datetime.date.fromisoformat(data)
-    elif issubclass_safe(tp, datetime.time):
-        return datetime.time.fromisoformat(data)
-    elif issubclass_safe(tp, UUID):
-        return tp(data)
-    elif isinstance(data, str):
-        if issubclass_safe(tp, str):
-            return tp(data)
-        elif is_list_type(tp):
-            data = parse_csv(data)
-            return typecast(data, tp)
-        else:
-            try:
-                loaded_data = json.loads(data)
-            except:
-                if re.match(r'^\w*$', data):
-                    raise TypeCastError(f'{data=} is not an instance of {tp=}')
-                else:
-                    raise
-            return typecast(loaded_data, tp)
-    else:
-        if len(type_inspect_seed) != 2:
-            raise TypeCastError(f'{data=} is not instance of {tp=}')
-        origin_type, type_args = type_inspect_seed
-        if origin_type is list:
-            assert isinstance(data, list)
-            return [typecast(item, type_args) for item in data]
-        elif origin_type == Union:
-            error_list = []
-            for type_arg in type_args:
+                items = orjson.loads(data)
+            except Exception as e:
+                raise ValueError(f'{data=} cannot parse to JSON {e}')
+            if not isinstance(items, list):
+                raise ValueError(f'{data=} cannot parse to list {tp=}')
+            type_inspect_result = inspect_type(tp)
+            tp_args = type_inspect_result[1] \
+                if len(type_inspect_result) == 2 else None
+            if not tp_args:
+                return items  # type: ignore
+            if not inspect.isclass(tp_args) or not issubclass(tp_args, pydantic.BaseModel):
+                raise TypeError(f'list type {tp=} is not supported')
+            result = []
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ValueError(f'{data=} cannot parse to {tp=}')
                 try:
-                    return typecast(data, type_arg)
-                except Exception as e:
-                    error_list.append(str(e))
-            raise TypeCastError(
-                f'{data=} is not any instance of {tp=}: ' + '; '.join(error_list))
-        elif origin_type == dict:
-            assert isinstance(data, dict)
-            optional_keys = getattr(tp, '__optional_keys__')
-            if optional_keys:
-                required_keys = set(type_args.keys()) - optional_keys
-            else:
-                required_keys = getattr(tp, '__required_keys__', set())
-            missing_keys = required_keys - set(data.keys())
-            none_value_keys = set()
-            result = {}
-            for item_key, item_value in data.items():
-                if item_key not in type_args:
-                    raise TypeCastError(
-                        f'{item_key=} is not member of {tp=}')
-                result[item_key] = typecast(
-                    item_value, type_args[item_key])
-            for item_key in missing_keys:
-                if typing_inspect.is_optional_type(type_args[item_key]):
-                    result[item_key] = None
-                    none_value_keys.add(item_key)
-            if missing_keys - none_value_keys:
-                raise TypeCastError(
-                    f'missing required keys {list(missing_keys - none_value_keys)}')
-            return result
+                    result.append(tp_args.model_validate(item))
+                except pydantic.ValidationError as e:
+                    raise ValueError(
+                        f'{item=} is not an list item of {tp_args=} {e}')
+            return result  # type: ignore
         else:
-            raise TypeCastError(f'type {tp=} is not supported ({data=})')
+            if not inspect.isclass(tp) or not issubclass(tp, pydantic.BaseModel):
+                raise TypeError(f'type {tp=} is not supported')
+            try:
+                return tp.model_validate_json(data)  # type: ignore
+            except pydantic.ValidationError as e:
+                raise ValueError(f'{data=} cannot parsec to {tp=} {e}')
 
+    @classmethod
+    def validate_query(self, data: str, tp: Type[T]) -> T:
+        """
+        try to convert a query string to the given type.
 
-def echo_typing_inspect():
-    import typing
-    int_args = typing_inspect.get_args(int)
-    int_origin = typing_inspect.get_origin(int)
-    print(f'{int_args=}')  # int_args=()
-    print(f'{int_origin=}')  # int_origin=None
-    list_args = typing_inspect.get_args(list)
-    list_origin = typing_inspect.get_origin(list)
-    print(f'{list_args=}')  # list_args=()
-    print(f'{list_origin=}')  # list_origin=None
-    list_int_args = typing_inspect.get_args(list[int])
-    list_int_origin = typing_inspect.get_origin(list[int])
-    print(f'{list_int_args=}')  # list_int_args=(<class 'int'>,)
-    print(f'{list_int_origin=}')  # list_int_origin=<class 'list'>
-    if sys.version_info[:2] >= (3, 11):
-        int_optional_args = typing_inspect.get_args(int | None)
-        int_optional_origin = typing_inspect.get_origin(int | None)
-        is_optional = typing_inspect.is_optional_type(int | None)
-        # int_optional_args=(<class 'int'>, <class 'NoneType'>)
-        print(f'{int_optional_args=}')
-        print(f'{int_optional_origin=}')  # int_optional_origin=None
-        print(f'{is_optional=}')  # is_optional=True
+        Args:
+            data: a query string.
+            tp: the type to convert to.
 
-        union_optional_args = typing_inspect.get_args(int | str)
-        union_optional_origin = typing_inspect.get_origin(int | str)
-        # union_optional_args=(<class 'int'>, <class 'str'>)
-        print(f'{union_optional_args=}')
-        print(f'{union_optional_origin=}')  # union_optional_origin=None
+        Returns:
+            the converted value.
 
-    union_optional_args = typing_inspect.get_args(Union[int, str])
-    union_optional_origin = typing_inspect.get_origin(Union[int, str])
-    # union_optional_args=(<class 'int'>, <class 'str'>)
-    print(f'{union_optional_args=}')
-    print(f'{union_optional_origin=}')  # union_optional_origin=typing.Union
+        Raises:
+            ValueError: if the data cannot be parsed to the given type (4xx Error for Frontend)
+            TypeError: if the given type is not supported (5xx Error for Frontend)
+        """
+        type_inspect_result = inspect_type(tp)
+        tp_origin = type_inspect_result[0]
+        tp_args = type_inspect_result[1] if len(
+            type_inspect_result) == 2 else None
+        if is_list_type(tp):
+            if not tp_args:
+                raise TypeError(f'{tp=} missing type of item')
+            try:
+                data_items = parse_csv(data)
+            except:
+                raise ValueError(f'{data=} is not a CSV format string {tp=}')
+            return [  # type: ignore
+                self.validate_query(item, tp_args)
+                for item in data_items]
+        elif tp_origin == Union:
+            if not tp_args:
+                raise TypeError(f'{tp=} is empty')  # 5xx Error in fact
+            for each_args_type in tp_args:
+                try:
+                    return self.validate_query(data, each_args_type)
+                except:
+                    continue
+            raise ValueError(f'{data=} is not any member of {tp=}')
+        elif tp_origin == Literal:
+            if not tp_args:
+                raise TypeError(f'{tp=} is empty')  # 5xx Error in fact
+            for each_args_item in tp_args:
+                if literal_to_str(each_args_item) == data:
+                    return data  # type: ignore
+            raise ValueError(f'{data=} is not member of {tp=}')
+        elif tp_origin == NewType:
+            if not tp_args:
+                raise TypeError(f'{tp=} is empty')
+            return self.validate_query(data, tp_args)
 
-    literral_args = typing_inspect.get_args(Literal['a', 'b'])
-    literal_origin = typing_inspect.get_origin(Literal['a', 'b'])
-    print(f'{literral_args=}')  # literral_args=('a', 'b')
-    print(f'{literal_origin=}')  # literal_origin=typing.Literal
+        if not inspect.isclass(tp):
+            raise TypeError(f'{tp=} is not a class')
 
-    UserId = NewType('UserId', int)
-    newtype_args = typing_inspect.get_args(UserId)
-    newtype_origin = typing_inspect.get_origin(UserId)
-    print(f'{newtype_args=}')  # newtype_args=()
-    print(f'{newtype_origin=}')  # newtype_origin=None
-    # newtype.__supertype__=<class 'int'>
-    print(f'newtype.__supertype__={UserId.__supertype__}')  # type: ignore
-
-    class Pet(typing.TypedDict):
-        name: str
-        age: int
-    pet_optional_args = typing_inspect.get_args(Pet)
-    pet_optional_origin = typing_inspect.get_origin(Pet)
-    is_dict = issubclass_safe(Pet, dict)
-    print(f'{pet_optional_args=}')  # pet_optional_args=()
-    print(f'{pet_optional_origin=}')  # pet_optional_origin=None
-    # is_dict=True {'name': <class 'str'>, 'age': <class 'int'>} {}
-    print(f'{is_dict=} {get_type_hints(Pet)} {get_type_hints(dict)}')
-    is_list = issubclass_safe(list[int], list)
-    print(f'{is_list=}')  # is_list=False
-    # is_list=True
-    print(f'is_list={is_list_type(List[int])} {is_list_type(List)}')
-
-
-def test_typecast():
-    import typing
-
-    class Pet(typing.TypedDict):
-        name: str
-        size: list[int]
-        child: Union[list['test_typecast.<locals>.Pet'], None]  # type: ignore
-    data = {'name': 'duck', 'size': '10,20,15', 'child': [
-        {'name': 'duckII', 'size': '5,10,8', 'child': None}]}
-    pet = typecast(data, Pet)
-    print(pet)
-
-
-if __name__ == '__main__':
-    echo_typing_inspect()
-    # test_typecast()
+        if issubclass(tp, enum.Enum):
+            try:
+                return tp(data)  # type: ignore
+            except:
+                raise ValueError(f'{data=} is not enum of {tp=}')
+        elif tp is bool:
+            if data.lower() == 'true' or data == '1' or data == '✔':
+                return True  # type: ignore
+            elif data.lower() == 'false' or data == '0' or data == '✖':
+                return False  # type: ignore
+            else:
+                raise ValueError(f'{data=} is not boolean')
+        elif issubclass(tp, (str, int, float)):
+            try:
+                return tp(data)  # type: ignore
+            except:
+                raise ValueError(f'{data=} is not an instance of {tp=}')
+        elif issubclass(tp, datetime.datetime):
+            return datetime.datetime.fromisoformat(data)  # type: ignore
+        elif issubclass(tp, datetime.date):
+            return datetime.date.fromisoformat(data)  # type: ignore
+        elif issubclass(tp, datetime.time):
+            return datetime.time.fromisoformat(data)  # type: ignore
+        elif issubclass(tp, pydantic.BaseModel):
+            try:
+                return tp.model_validate_json(data)  # type: ignore
+            except pydantic.ValidationError as e:
+                raise ValueError(f'{data=} is not an instance of {tp=} {e}')
+        else:
+            raise TypeError(f'type {tp=} is not supported')

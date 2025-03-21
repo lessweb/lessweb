@@ -5,11 +5,13 @@ import re
 import sys
 from logging.handlers import TimedRotatingFileHandler
 from os import environ
-from typing import Any, Literal, Optional, Type, TypeVar
+from typing import Any, Callable, Literal, Optional, Type, TypeVar
 
 import pydantic
 import toml
-from aiohttp.web import AppKey, Application, run_app
+from aiohttp.web import (AppKey, Application, HTTPException,
+                         HTTPInternalServerError, Request, Response,
+                         middleware, run_app)
 from aiojobs.aiohttp import setup as aiojobs_setup
 from dotenv import find_dotenv, load_dotenv
 
@@ -17,9 +19,22 @@ from .ioc import (APP_BRIDGE_KEY, APP_CONFIG_KEY, APP_EVENT_SUBSCRIBER_KEY,
                   APP_ON_CLEANUP_KEY, APP_ON_SHUTDOWN_KEY, APP_ON_STARTUP_KEY,
                   Middleware, Module, autowire_handler, autowire_module,
                   get_endpoint_metas, get_event_subscriber_metas,
-                  init_orjson_option, make_middleware)
-from .typecast import typecast
-from .utils import scan_import
+                  make_middleware)
+from .typecast import TypeCast
+from .utils import absolute_ref, is_first_touch, scan_import
+
+
+@middleware
+async def global_error_handler(request: Request, handler: Callable) -> Response:
+    try:
+        response = await handler(request)
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_type = absolute_ref(type(e))
+        logging.exception(f'global error: [{error_type}] {e}')
+        raise HTTPInternalServerError(text=f'[{error_type}] {e}')
+    return response
 
 
 def make_environ_key(key_path: str):
@@ -45,6 +60,7 @@ class LesswebLoggerConfig(pydantic.BaseModel):
 
 class LesswebBootstrapConfig(pydantic.BaseModel):
     port: int = 8080
+    enable_global_error_handling: bool = True
     orjson_option: str = ''
     logger: Optional[LesswebLoggerConfig] = None
 
@@ -62,7 +78,7 @@ def load_module_config(app: Application, module_config_key: str, module_config_c
         result = module_config_cls.model_validate(
             module_config)  # type: ignore
     else:
-        result = typecast(module_config, module_config_cls)
+        raise TypeError(f'{module_config_cls=} is not supported')
     app[app_key] = result
     return result
 
@@ -92,14 +108,17 @@ class Bridge:
         self.bootstrap_config = self._load_config()
         self._load_logger(self.bootstrap_config)
         self._load_orjson(self.bootstrap_config)
+        if self.bootstrap_config.enable_global_error_handling:
+            logging.debug('add global_error_handling middleware')
+            self.app.middlewares.append(global_error_handler)
 
     def _load_config(self) -> LesswebBootstrapConfig:
         if env := environ.get('ENV'):
             env_file = find_dotenv(f'.env.{env}')
             assert load_dotenv(
-                env_file), f'load dotenv file failed: {env_file}'
+                env_file, override=True), f'load dotenv file failed: {env_file}'
         else:
-            load_dotenv()
+            load_dotenv(override=True)
         self.config = self._load_config_with_env()
         self.app[APP_CONFIG_KEY] = self.config
         return load_module_config(self.app, 'lessweb', LesswebBootstrapConfig)
@@ -153,16 +172,19 @@ class Bridge:
             logger.addHandler(stream_handler)
 
     def _load_orjson(self, config: LesswebBootstrapConfig) -> None:
-        init_orjson_option(config.orjson_option)
+        TypeCast.init_orjson_option(config.orjson_option)
 
     def scan(self, *packages) -> None:
         imported_modules = scan_import(packages)
-        for _, obj in imported_modules.items():
+        ref_set: set[str] = set()
+        for ref, obj in imported_modules.items():
             if inspect.isclass(obj):
                 if issubclass(obj, Module):
                     autowire_module(self.app, obj)
                 elif issubclass(obj, Middleware):
-                    self.app.middlewares.append(make_middleware(obj))
+                    if is_first_touch(ref, ref_set):
+                        logging.debug('add middleware-> %s', ref)
+                        self.app.middlewares.append(make_middleware(obj))
             elif inspect.isfunction(obj):
                 endpoint_metas = get_endpoint_metas(obj)
                 event_subscriber_metas = get_event_subscriber_metas(obj)
@@ -170,20 +192,22 @@ class Bridge:
                     if not inspect.iscoroutinefunction(obj):
                         raise TypeError(
                             f'endpoint must be coroutine function: {obj}')
-                    for endpoint_meta in endpoint_metas:
-                        self.app.router.add_route(
-                            method=endpoint_meta.method,
-                            path=endpoint_meta.path,
-                            handler=autowire_handler(obj),
-                        )
+                    if is_first_touch(ref, ref_set):
+                        for endpoint_meta in endpoint_metas:
+                            self.app.router.add_route(
+                                method=endpoint_meta.method,
+                                path=endpoint_meta.path,
+                                handler=autowire_handler(obj),
+                            )
                 if event_subscriber_metas:
                     if not inspect.iscoroutinefunction(obj):
                         raise TypeError(
                             f'event subscriber must be coroutine function: {obj}')
-                    for event_subscriber_meta in event_subscriber_metas:
-                        self.app[APP_EVENT_SUBSCRIBER_KEY].append(
-                            (event_subscriber_meta,
-                             autowire_handler(obj, background=event_subscriber_meta.background)))
+                    if is_first_touch(ref, ref_set):
+                        for event_subscriber_meta in event_subscriber_metas:
+                            self.app[APP_EVENT_SUBSCRIBER_KEY].append(
+                                (event_subscriber_meta,
+                                 autowire_handler(obj, background=event_subscriber_meta.background)))
             else:
                 pass
         aiojobs_setup(self.app)

@@ -17,6 +17,13 @@ def list_dirs(path: str) -> list[str]:
     return [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
 
 
+def is_first_touch(ref: str, ref_set: set) -> bool:
+    if ref in ref_set:
+        return False
+    ref_set.add(ref)
+    return True
+
+
 def list_files(path: str) -> list[str]:
     """
     Example:

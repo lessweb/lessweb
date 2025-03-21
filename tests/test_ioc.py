@@ -21,7 +21,7 @@ def test_endpoint_initialization():
 def test_func_annotated_metas_with_no_annotation():
     """Test function with no Annotated return type"""
     def sample_func() -> bool:
-        pass
+        return True
 
     return_type, metadata = func_annotated_metas(sample_func)
     assert return_type == bool
@@ -31,7 +31,7 @@ def test_func_annotated_metas_with_no_annotation():
 def test_func_annotated_metas_with_annotation():
     """Test function with Annotated return type"""
     def sample_func() -> Annotated[bool, 'meta']:
-        pass
+        return True
 
     return_type, metadata = func_annotated_metas(sample_func)
     assert return_type == bool
@@ -41,7 +41,7 @@ def test_func_annotated_metas_with_annotation():
 def test_func_annotated_metas_with_multiple_metadata():
     """Test function with multiple metadata in Annotation"""
     def sample_func() -> Annotated[str, 'meta1', 'meta2']:
-        pass
+        return ''
 
     return_type, metadata = func_annotated_metas(sample_func)
     assert return_type == str
@@ -51,7 +51,7 @@ def test_func_annotated_metas_with_multiple_metadata():
 def test_get_endpoint_metas_with_no_endpoints():
     """Test function with no Endpoint metadata"""
     def sample_func() -> Annotated[bool, 'not_endpoint']:
-        pass
+        return True
 
     endpoints = get_endpoint_metas(sample_func)
     assert endpoints == []
@@ -62,7 +62,7 @@ def test_get_endpoint_metas_with_single_endpoint():
     endpoint = Endpoint("GET", "/test")
 
     def sample_func() -> Annotated[bool, endpoint]:
-        pass
+        return True
 
     endpoints = get_endpoint_metas(sample_func)
     assert len(endpoints) == 1
@@ -76,7 +76,7 @@ def test_get_endpoint_metas_with_multiple_endpoints():
     endpoint2 = Endpoint("POST", "/test2")
 
     def sample_func() -> Annotated[bool, endpoint1, endpoint2, 'other_meta']:
-        pass
+        return True
 
     endpoints = get_endpoint_metas(sample_func)
     assert len(endpoints) == 2
@@ -91,7 +91,7 @@ def test_get_endpoint_metas_with_mixed_metadata():
     endpoint = Endpoint("GET", "/test")
 
     def sample_func() -> Annotated[bool, 'meta1', endpoint, 'meta2']:
-        pass
+        return False
 
     endpoints = get_endpoint_metas(sample_func)
     assert len(endpoints) == 1
@@ -156,7 +156,7 @@ def test_func_with_mixed_params():
 
 def test_func_with_return_annotation():
     def xyz(a: Annotated[int, 'meta']) -> str:
-        pass
+        return ''
 
     result = func_arg_annotated_metas(xyz)
     assert result == {'a': ('meta',)}
@@ -178,7 +178,7 @@ def test_lambda_function():
 
 def test_function_with_annotated_return():
     def example_func(a: int) -> Annotated[bool, 'meta']:
-        pass
+        return False
 
     result_type, result_meta = func_annotated_metas(example_func)
     assert result_type == bool
@@ -187,7 +187,7 @@ def test_function_with_annotated_return():
 
 def test_function_with_multiple_metadata():
     def example_func(a: int) -> Annotated[str, 'meta1', 'meta2', 'meta3']:
-        pass
+        return ''
 
     result_type, result_meta = func_annotated_metas(example_func)
     assert result_type == str
@@ -196,7 +196,7 @@ def test_function_with_multiple_metadata():
 
 def test_function_without_annotation():
     def example_func(a: int) -> bool:
-        pass
+        return False
 
     result_type, result_meta = func_annotated_metas(example_func)
     assert result_type == bool
@@ -214,7 +214,7 @@ def test_function_without_return_type():
 
 def test_function_with_complex_type():
     def example_func(a: int) -> Annotated[list[str], 'metadata']:
-        pass
+        return ['']
 
     result_type, result_meta = func_annotated_metas(example_func)
     assert result_type == list[str]

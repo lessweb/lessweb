@@ -36,10 +36,9 @@ class EventEmitter(Module):
 
     async def on_startup(self, app: Application) -> None:
         self.app = app
-        self.build_router(app)
+        self.build_router()
 
-    def build_router(self, app: Application) -> None:
-        self.app = app
+    def build_router(self) -> None:
         self.router = UrlDispatcher()
         for meta, handler in self.app[APP_EVENT_SUBSCRIBER_KEY]:
             if isinstance(meta, self.subscriber_annotation):

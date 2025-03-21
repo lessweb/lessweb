@@ -7,7 +7,7 @@ name = "lessweb"
 version = "1.99.0"
 description = 'A pythonic web framework'
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ['lessweb', 'web', 'web.py', 'aiohttp']
 authors = [
     {name = "qorzj", email = "goodhorsezxj@gmail.com"},

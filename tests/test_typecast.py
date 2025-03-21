@@ -3,11 +3,10 @@ import unittest
 from datetime import date, datetime, time
 from enum import Enum
 from typing import (Any, Dict, Generator, List, Literal, NewType, Optional,
-                    TypedDict, Union)
+                    TypeAlias, TypedDict, Union)
 from uuid import UUID
 
-from lessweb.typecast import (TypeCastError, inspect_type,
-                              semi_json_schema_type, typecast)
+from lessweb.typecast import TypeCast, inspect_type, semi_json_schema_type
 
 NoneType = type(None)
 
@@ -59,103 +58,96 @@ class SampleEnum(Enum):
 
 class TestTypecast(unittest.TestCase):
     def test_typecast_same_type(self):
-        data = 10
+        data = '10'
         tp = int
-        result = typecast(data, tp)
-        self.assertEqual(result, data)
+        result = TypeCast.validate_query(data, tp)
+        self.assertEqual(result, int(data))
 
     def test_typecast_enum(self):
         data = "V1"
         tp = SampleEnum
-        result = typecast(data, tp)
+        result = TypeCast.validate_query(data, tp)
         self.assertEqual(result, SampleEnum.VALUE1)
 
     def test_typecast_datetime(self):
         data = "2022-01-01T12:00:00"
         tp = datetime
-        result = typecast(data, tp)
+        result = TypeCast.validate_query(data, tp)
         self.assertEqual(result, datetime.fromisoformat(data))
 
     def test_typecast_date(self):
         data = "2022-01-01"
         tp = date
-        result = typecast(data, tp)
+        result = TypeCast.validate_query(data, tp)
         self.assertEqual(result, date.fromisoformat(data))
 
     def test_typecast_time(self):
         data = "12:00:00"
         tp = time
-        result = typecast(data, tp)
+        result = TypeCast.validate_query(data, tp)
         self.assertEqual(result, time.fromisoformat(data))
-
-    def test_typecast_uuid(self):
-        data = 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6'
-        tp = UUID
-        result = typecast(data, tp)
-        self.assertEqual(result.hex, 'f81d4fae7dec11d0a76500a0c91e6bf6')
 
     def test_typecast_str(self):
         data = "Hello"
         tp = str
-        result = typecast(data, tp)
+        result = TypeCast.validate_query(data, tp)
         self.assertEqual(result, data)
 
     def test_typecast_list(self):
         data = "1,2,3"
         tp = List[int]
-        result = typecast(data, tp)
+        result = TypeCast.validate_query(data, tp)
         self.assertEqual(result, [1, 2, 3])
 
     def test_typecast_dict_missing_required_keys(self):
         data = '{"age": 25}'
         tp = Dict[str, Union[str, int]]
         with self.assertRaises(NotImplementedError):
-            typecast(data, tp)
+            TypeCast.validate_query(data, tp)
 
-    def test_typecast_unsupported_type(self):
+    def test_typecast_wrong_float_value(self):
         data = "data"
         tp = float
-        with self.assertRaises(TypeCastError):
-            typecast(data, tp)
+        with self.assertRaises(ValueError):
+            TypeCast.validate_query(data, tp)
 
     def test_typecast_literal(self):
         data = "b"
         tp = Literal['a', 'b']
-        result = typecast(data, tp)
-        self.assertEqual(result, data)
+        result: Any = TypeCast.validate_query('b', Literal['a', 'b'])
+        self.assertEqual(result, 'b')
         data = "c"
         try:
-            typecast(data, tp)
-            self.fail('should raise TypeCastError')
-        except TypeCastError as e:
+            TypeCast.validate_query(data, tp)
+            self.fail('should raise ValueError')
+        except ValueError as e:
             self.assertEqual(str(e), f'{data=} is not member of {tp=}')
-        tp = Literal
         try:
-            typecast(data, tp)
-            self.fail('should raise TypeCastError')
-        except TypeCastError as e:
-            self.assertEqual(str(e), f'{tp=} is empty')
+            TypeCast.validate_query(data, Literal)
+            self.fail('should raise TypeError')
+        except TypeError as e:
+            self.assertEqual(str(e), 'tp=typing.Literal is empty')
 
     def test_typecast_union(self):
         data = "10"
         tp = Union[int, list[int]]
-        result = typecast(data, tp)
+        result: Any = TypeCast.validate_query(data, tp)
         self.assertEqual(result, 10)
         data = "11,12"
-        result = typecast(data, tp)
+        result = TypeCast.validate_query(data, tp)
         self.assertEqual(result, [11, 12])
         data = "12.3"
-        with self.assertRaises(TypeCastError):
-            typecast(data, tp)
+        with self.assertRaises(ValueError):
+            TypeCast.validate_query(data, tp)
 
     def test_typecast_newtype(self):
         data = "10"
         tp = UserId
-        result = typecast(data, tp)
+        result = TypeCast.validate_query(data, tp)
         self.assertEqual(result, UserId(10))
         data = "12.3"
-        with self.assertRaises(TypeCastError):
-            typecast(data, tp)
+        with self.assertRaises(ValueError):
+            TypeCast.validate_query(data, tp)
 
 
 class TestSemiJsonSchemaType(unittest.TestCase):

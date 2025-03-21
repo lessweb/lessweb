@@ -2,22 +2,20 @@ import inspect
 import logging
 from dataclasses import is_dataclass
 from typing import (Annotated, Any, Awaitable, Callable, Dict, Optional, Tuple,
-                    Type, TypeVar, Union, get_origin, get_type_hints)
+                    Type, TypeAlias, TypeVar, Union, get_origin,
+                    get_type_hints)
 
-import orjson
 import pydantic
 from aiohttp.typedefs import LooseHeaders
 from aiohttp.web import (Application, HTTPBadRequest, HTTPError, Request,
                          Response, StreamResponse, middleware)
 
 from lessweb.annotation import DefaultFactory, Endpoint, OnEvent, TextResponse
-from lessweb.typecast import typecast
+from lessweb.typecast import TypeCast
 from lessweb.utils import absolute_ref
 
-ENDPOINT_TYPE = Callable[..., Awaitable[Any]]
-HANDLER_TYPE = Callable[[Request], Awaitable[Any]]
-REQUEST_STACK_VALUE = Union[str, dict, list, pydantic.BaseModel]
-ORJSON_OPTION = 0
+ENDPOINT_TYPE: TypeAlias = Callable[..., Awaitable[Any]]
+HANDLER_TYPE: TypeAlias = Callable[[Request], Awaitable[Any]]
 POSITIONAL_ONLY = 0
 KEYWORD_ONLY = 3
 
@@ -262,16 +260,6 @@ def autowire(request: Request, cls: Type[U]) -> U:
     return singleton  # type: ignore
 
 
-def init_orjson_option(option_text: str):
-    global ORJSON_OPTION
-    if option_text:
-        for option_word in option_text.split(','):
-            assert hasattr(orjson, f'OPT_{option_word}')
-            option_flag = getattr(orjson, f'OPT_{option_word}')
-            ORJSON_OPTION |= option_flag
-    return ORJSON_OPTION
-
-
 def rest_error(
         error: Type[HTTPError],
         data,
@@ -280,7 +268,7 @@ def rest_error(
         **kwargs,
 ) -> HTTPError:
     return error(
-        body=orjson.dumps(data, option=ORJSON_OPTION),
+        body=TypeCast.dumps(data),
         headers=headers,
         content_type='application/json',
         **kwargs,
@@ -294,27 +282,17 @@ def rest_response(
         reason: Optional[str] = None,
         headers: Optional[LooseHeaders] = None,
 ) -> Response:
-    if isinstance(data, pydantic.BaseModel):
-        response = Response(
-            body=data.model_dump_json(),
-            status=status,
-            reason=reason,
-            headers=headers,
-            content_type='application/json',
-        )
-    else:
-        response = Response(
-            body=orjson.dumps(data, option=ORJSON_OPTION),
-            status=status,
-            reason=reason,
-            headers=headers,
-            content_type='application/json',
-        )
-    response['data'] = data
+    response = Response(
+        body=TypeCast.dumps(data),
+        status=status,
+        reason=reason,
+        headers=headers,
+        content_type='application/json',
+    )
     return response
 
 
-def get_request_stack(request: Request) -> list[REQUEST_STACK_VALUE]:
+def get_request_stack(request: Request) -> list[Union[str, bytes]]:
     """
     用于实现请求级别对于requestBody的统一处理。
     """
@@ -324,7 +302,9 @@ def get_request_stack(request: Request) -> list[REQUEST_STACK_VALUE]:
     return request[REQUEST_STACK_KEY]
 
 
-def push_request_stack(request: Request, value: REQUEST_STACK_VALUE):
+def push_request_stack(request: Request, value: Union[str, bytes]):
+    if not isinstance(value, bytes):
+        raise TypeError('value must be str or bytes')
     request_stack = get_request_stack(request)
     request_stack.append(value)
 
@@ -341,46 +321,30 @@ def autowire_handler(sp_endpoint: ENDPOINT_TYPE, background: bool = False) -> HA
         for name, (depends_type, default, kind) in func_arg_spec(sp_endpoint).items():
             if kind == POSITIONAL_ONLY:
                 request_stack = get_request_stack(request)
-                request_data: REQUEST_STACK_VALUE
+                request_data: Union[str, bytes]
                 if not args and not request_stack:
-                    request_data = await request.text()
+                    request_data = await request.read()
                 elif not request_stack:
                     raise TypeError(
                         f'request stack is empty for param: {name}')
                 else:
                     request_data = request_stack.pop()
-                if inspect.isclass(depends_type) and issubclass(depends_type, pydantic.BaseModel):
-                    try:
-                        if isinstance(request_data, str):
-                            data_pydantic = depends_type.model_validate_json(
-                                request_data)
-                        else:
-                            data_pydantic = depends_type.model_validate(
-                                request_data)
-                        args.append(data_pydantic)
-                    except pydantic.ValidationError as e:
-                        raise rest_error(
-                            HTTPBadRequest, {'message': f'invalid request body: {e}'})
-                else:
-                    try:
-                        if isinstance(request_data, str):
-                            data_json = orjson.loads(request_data)
-                        elif isinstance(request_data, pydantic.BaseModel):
-                            data_json = dict(request_data)
-                        else:
-                            data_json = request_data
-                    except orjson.JSONDecodeError as e:
-                        raise rest_error(
-                            HTTPBadRequest, {'message': f'request body raise JSONDecodeError: {e}'})
-                    try:
-                        args.append(typecast(data_json, depends_type))
-                    except Exception as e:
-                        raise rest_error(
-                            HTTPBadRequest, {'message': f'request body decoding error: {e}'})
+                if depends_type in (bytes, str):
+                    if not isinstance(request_data, depends_type):
+                        raise TypeError(
+                            f'positional only param: {name} must be {depends_type} not {type(request_data)}')
+                try:
+                    parsed_data = TypeCast.validate_json(
+                        request_data, depends_type)
+                    args.append(parsed_data)
+                except ValueError as e:
+                    logging.debug(f'invalid request body: {name=} {e}')
+                    raise rest_error(
+                        HTTPBadRequest, {'message': f'invalid request body'})
             elif kind == KEYWORD_ONLY:
-                chosen_value = request.match_info[name] if name in request.match_info \
+                query_value = request.match_info[name] if name in request.match_info \
                     else request.query.get(name)
-                if chosen_value is None:
+                if query_value is None:
                     if default is inspect.Signature.empty:
                         default = spawn_default_factory(
                             arg_annotated_metas, name)
@@ -391,7 +355,8 @@ def autowire_handler(sp_endpoint: ENDPOINT_TYPE, background: bool = False) -> HA
                         kwargs[name] = default
                 else:
                     try:
-                        kwargs[name] = typecast(chosen_value, depends_type)
+                        kwargs[name] = TypeCast.validate_query(
+                            query_value, depends_type)
                     except Exception:
                         raise rest_error(
                             HTTPBadRequest, {'message': f'invalid parameter: {name}'})
