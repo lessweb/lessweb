@@ -46,7 +46,7 @@ if __name__ == '__main__':
     main()
 ```
 
-Start the application with the command below, it listens on `http://localhost:8080/` by default.
+Start the application with the command below, it listens on `http://localhost:8080` by default.
 
 ```shell
 python main.py
