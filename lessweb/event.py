@@ -70,7 +70,7 @@ class EventEmitter(Module):
             headers={'Content-Type': 'application/json'},
             app=self.app
         )
-        logging.debug('emit:', event_path, payload)
+        logging.debug('emit: %s => %s', event_path, payload)
         request._read_bytes = TypeCast.dumps(payload)
         match_info = await self.router.resolve(request)
         match_info.add_app(self.app)
