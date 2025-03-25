@@ -69,6 +69,20 @@ T = TypeVar('T')
 
 
 def load_module_config(app: Application, module_config_key: str, module_config_cls: Type[T]) -> T:
+    """
+    加载指定模块的配置。
+
+    参数：
+        app (Application): aiohttp的应用对象，包含全局配置信息。
+        module_config_key (str): 在全局配置中查找模块配置的键名。
+        module_config_cls (Type[T]): 用于校验和解析模块配置的Pydantic模型类，必须是pydantic.BaseModel的子类。
+
+    返回：
+        T: 解析后的模块配置实例。
+
+    异常：
+        TypeError: 如果module_config_cls不是pydantic.BaseModel的子类，则抛出此异常。
+    """
     module_config = app[APP_CONFIG_KEY].get(module_config_key, {})
     app_key = AppKey(f'{module_config_key}.config', module_config_cls)
     if app_key in app:
@@ -94,6 +108,10 @@ class Bridge:
         return app[APP_BRIDGE_KEY]
 
     def __init__(self, config: Optional[str] = None, app: Optional[Application] = None) -> None:
+        """
+        config: path to config file
+        app: aiohttp application
+        """
         if app is None:
             self.app = Application()
         else:

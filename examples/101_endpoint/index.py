@@ -18,6 +18,7 @@ async def create_pet(request: Request) -> Annotated[dict, Post('/pet')]:
     pet = await request.json()
     return pet
 
+
 if __name__ == '__main__':
     bridge = Bridge()
     bridge.scan(get_pet_detail, get_pet_list, create_pet)

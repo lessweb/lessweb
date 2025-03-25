@@ -292,6 +292,16 @@ def rest_response(
 
 
 def get_request_stack(request: Request) -> list[Union[str, bytes]]:
+    """
+    获取请求对象中保存的请求堆栈。
+
+    参数：
+        request (Request): aiohttp 的请求对象，通过 request 的字典属性存放中间件等过程中传递的数据堆栈，
+                           该堆栈用于在处理请求过程中存放中间转换或验证后的数据（例如经过转换后的请求体）。
+
+    返回：
+        list[str | bytes]: 返回请求堆栈列表。如果请求对象中不存在该堆栈，则会在请求中初始化一个空列表后返回。
+    """
     if (request_stack := request.get(REQUEST_STACK_KEY)) and isinstance(request_stack, list):
         return request_stack
     request[REQUEST_STACK_KEY] = []
@@ -299,6 +309,28 @@ def get_request_stack(request: Request) -> list[Union[str, bytes]]:
 
 
 def push_request_stack(request: Request, value: Union[str, bytes]):
+    """
+    向请求对象的请求堆栈中添加一个值。
+
+    参数：
+        request (Request): aiohttp 的请求对象，其内部包含用于存储请求处理过程数据的堆栈。
+        value (str | bytes): 要添加到堆栈中的数据值。
+                            注意：当前逻辑要求 value 必须为 bytes 类型，否则将抛出 TypeError。
+
+    使用示例：
+        在一个Middleware中，可能先对原始请求体进行读取和预处理：
+
+            async def some_middleware(request, handler):
+                raw_data = await request.read()
+                push_request_stack(request, raw_data)
+                # 对读取到的数据做进一步转换（例如转换为 JSON 后修改数据），转换后的数据也必须是 bytes 类型
+                modified_data = ...
+                push_request_stack(request, modified_data)
+                return await handler(request)
+
+        在后续处理 endpoint 中，可以使用 positional-only 参数，框架通过调用 get_request_stack(request) 
+        获取堆栈列表，并对堆栈进行 pop 操作，将最后一次推入的数据提取出来作为 positional-only 参数传递给目标处理函数。
+    """
     if not isinstance(value, bytes):
         raise TypeError('value must be str or bytes')
     request_stack = get_request_stack(request)
