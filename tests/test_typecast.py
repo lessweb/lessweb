@@ -3,8 +3,7 @@ import unittest
 from datetime import date, datetime, time
 from enum import Enum
 from typing import (Any, Dict, Generator, List, Literal, NewType, Optional,
-                    TypeAlias, TypedDict, Union)
-from uuid import UUID
+                    TypedDict, Union)
 
 from lessweb.typecast import TypeCast, inspect_type, semi_json_schema_type
 

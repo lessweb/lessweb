@@ -328,7 +328,7 @@ def push_request_stack(request: Request, value: Union[str, bytes]):
                 push_request_stack(request, modified_data)
                 return await handler(request)
 
-        在后续处理 endpoint 中，可以使用 positional-only 参数，框架通过调用 get_request_stack(request) 
+        在后续处理 endpoint 中，可以使用 positional-only 参数，框架通过调用 get_request_stack(request)
         获取堆栈列表，并对堆栈进行 pop 操作，将最后一次推入的数据提取出来作为 positional-only 参数传递给目标处理函数。
     """
     if not isinstance(value, bytes):
@@ -379,7 +379,7 @@ def autowire_handler(sp_endpoint: ENDPOINT_TYPE, background: bool = False) -> HA
                 except ValueError as e:
                     logging.debug(f'invalid request body: {name=} {e}')
                     raise rest_error(
-                        HTTPBadRequest, {'message': f'invalid request body'})
+                        HTTPBadRequest, {'message': 'invalid request body'})
             elif kind == KEYWORD_ONLY:
                 query_value = request.match_info[name] if name in request.match_info \
                     else request.query.get(name)

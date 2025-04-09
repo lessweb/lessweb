@@ -43,7 +43,7 @@ def future_typed_dict_keys(tp):
             return tp.__annotations__.copy()
         else:
             return None
-    except:
+    except Exception:
         return None
 
 
@@ -231,7 +231,7 @@ class TypeCast:
                 raise TypeError(f'{tp=} missing type of item')
             try:
                 data_items = parse_csv(data)
-            except:
+            except Exception:
                 raise ValueError(f'{data=} is not a CSV format string {tp=}')
             return [  # type: ignore
                 self.validate_query(item, tp_args)
@@ -242,7 +242,7 @@ class TypeCast:
             for each_args_type in tp_args:
                 try:
                     return self.validate_query(data, each_args_type)
-                except:
+                except Exception:
                     continue
             raise ValueError(f'{data=} is not any member of {tp=}')
         elif tp_origin == Literal:
@@ -263,7 +263,7 @@ class TypeCast:
         if issubclass(tp, enum.Enum):
             try:
                 return tp(data)  # type: ignore
-            except:
+            except Exception:
                 raise ValueError(f'{data=} is not enum of {tp=}')
         elif tp is bool:
             if data.lower() == 'true' or data == '1' or data == '✔':
@@ -275,7 +275,7 @@ class TypeCast:
         elif issubclass(tp, (str, int, float)):
             try:
                 return tp(data)  # type: ignore
-            except:
+            except Exception:
                 raise ValueError(f'{data=} is not an instance of {tp=}')
         elif issubclass(tp, datetime.datetime):
             return datetime.datetime.fromisoformat(data)  # type: ignore
