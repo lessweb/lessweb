@@ -1,6 +1,6 @@
 ## version 2.0.0
 
-(In progress...)
+1. Feature: use flake8 instead of autopep8;
 
 ## version 1.5.0
 1. Feature: add @config and update autowire;
