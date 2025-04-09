@@ -32,7 +32,7 @@ __all__ = (
 )
 
 # A mapping of {<member name>: (package, <module name>)} defining dynamic imports
-_dynamic_imports: 'dict[str, tuple[str, str]]' = {
+_dynamic_imports: 'dict[str, tuple[str|None, str]]' = {
     # bridge
     'Bridge': (__spec__.parent, '.bridge'),
     'load_module_config': (__spec__.parent, '.bridge'),
