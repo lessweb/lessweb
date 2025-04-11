@@ -9,17 +9,34 @@ from typing import Any, Callable, Literal, Optional, Type, TypeVar
 
 import pydantic
 import toml
-from aiohttp.web import (AppKey, Application, HTTPException,
-                         HTTPInternalServerError, Request, Response,
-                         middleware, run_app)
+from aiohttp.web import (
+    AppKey,
+    Application,
+    HTTPException,
+    HTTPInternalServerError,
+    Request,
+    Response,
+    middleware,
+    run_app,
+)
 from aiojobs.aiohttp import setup as aiojobs_setup
 from dotenv import find_dotenv, load_dotenv
 
-from .ioc import (APP_BRIDGE_KEY, APP_CONFIG_KEY, APP_EVENT_SUBSCRIBER_KEY,
-                  APP_ON_CLEANUP_KEY, APP_ON_SHUTDOWN_KEY, APP_ON_STARTUP_KEY,
-                  Middleware, Module, autowire_handler, autowire_module,
-                  get_endpoint_metas, get_event_subscriber_metas,
-                  make_middleware)
+from .ioc import (
+    APP_BRIDGE_KEY,
+    APP_CONFIG_KEY,
+    APP_EVENT_SUBSCRIBER_KEY,
+    APP_ON_CLEANUP_KEY,
+    APP_ON_SHUTDOWN_KEY,
+    APP_ON_STARTUP_KEY,
+    Middleware,
+    Module,
+    autowire_handler,
+    autowire_module,
+    get_endpoint_metas,
+    get_event_subscriber_metas,
+    make_middleware,
+)
 from .typecast import TypeCast
 from .utils import absolute_ref, is_first_touch, scan_import
 

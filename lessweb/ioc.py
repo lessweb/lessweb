@@ -1,14 +1,33 @@
 import inspect
 import logging
 from dataclasses import is_dataclass
-from typing import (Annotated, Any, Awaitable, Callable, Dict, Optional, Tuple,
-                    Type, TypeAlias, TypeVar, Union, get_origin,
-                    get_type_hints)
+from typing import (
+    Annotated,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Optional,
+    Tuple,
+    Type,
+    TypeAlias,
+    TypeVar,
+    Union,
+    get_origin,
+    get_type_hints,
+)
 
 import pydantic
 from aiohttp.typedefs import LooseHeaders
-from aiohttp.web import (Application, HTTPBadRequest, HTTPError, Request,
-                         Response, StreamResponse, middleware)
+from aiohttp.web import (
+    Application,
+    HTTPBadRequest,
+    HTTPError,
+    Request,
+    Response,
+    StreamResponse,
+    middleware,
+)
 
 from lessweb.annotation import DefaultFactory, Endpoint, OnEvent, TextResponse
 from lessweb.typecast import TypeCast

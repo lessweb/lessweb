@@ -2,17 +2,25 @@ import csv
 import datetime
 import enum
 import inspect
-from typing import (Any, Dict, List, Literal, NewType, Type, TypeGuard,
-                    TypeVar, Union, get_type_hints)
+from types import NoneType
+from typing import (
+    Any,
+    Dict,
+    List,
+    Literal,
+    NewType,
+    Type,
+    TypeGuard,
+    TypeVar,
+    Union,
+    get_type_hints,
+)
 
 import orjson
 import pydantic
 import typing_inspect
 
 T = TypeVar('T')
-
-
-NoneType = type(None)
 
 
 classname_dict: Dict[str, Type] = {}
