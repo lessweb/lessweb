@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lessweb"
-version = "2.0.0"
+version = "2.0.1"
 description = 'A pythonic web framework'
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,7 @@ keywords = ['lessweb', 'web', 'web.py', 'aiohttp']
 authors = [
     {name = "qorzj", email = "goodhorsezxj@gmail.com"},
 ]
-license = {text = "Apache 2"}
+license = {file = "LICENSE.txt"}
 dependencies = [
     "aiohttp",
     "aiojobs",
