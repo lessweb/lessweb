@@ -5,6 +5,7 @@ import re
 import sys
 from logging.handlers import TimedRotatingFileHandler
 from os import environ
+from pathlib import Path
 from typing import Any, Callable, Literal, Optional, Type, TypeVar
 
 import pydantic
@@ -159,13 +160,19 @@ class Bridge:
         return load_module_config(self.app, 'lessweb', LesswebBootstrapConfig)
 
     def _load_config_with_env(self) -> dict[str, Any]:
+        config = {}
         if self.config_file:
             if not os.path.exists(self.config_file):
                 raise FileNotFoundError(
                     f'config file not found: {self.config_file}')
-            config = toml.loads(open(self.config_file).read())
-        else:
-            config = {}
+            elif os.path.isdir(self.config_file):
+                config_dir = Path(self.config_file)
+                for config_path in config_dir.iterdir():
+                    if config_path.is_file():
+                        with open(config_path) as f:
+                            config.update(toml.loads(f.read()))
+            else:
+                config.update(toml.loads(open(self.config_file).read()))
         config.setdefault('lessweb', {})
         dfs = [('', config)]  # list[(prefix, data)]
         while dfs:
@@ -209,17 +216,21 @@ class Bridge:
     def _load_orjson(self, config: LesswebBootstrapConfig) -> None:
         TypeCast.init_orjson_option(config.orjson_option)
 
+    def middlewares(self, *middlewares) -> None:
+        for m in middlewares:
+            if inspect.isclass(m) and issubclass(m, Middleware):
+                self.app.middlewares.append(make_middleware(m))
+            elif inspect.isfunction(m):
+                self.app.middlewares.append(m)
+            else:
+                raise TypeError(f'middleware must be subclass of Middleware or function: {m}')
+
     def scan(self, *packages) -> None:
         imported_modules = scan_import(packages)
         ref_set: set[str] = set()
         for ref, obj in imported_modules.items():
-            if inspect.isclass(obj):
-                if issubclass(obj, Module):
-                    autowire_module(self.app, obj)
-                elif issubclass(obj, Middleware):
-                    if is_first_touch(ref, ref_set):
-                        logging.debug('add middleware-> %s', ref)
-                        self.app.middlewares.append(make_middleware(obj))
+            if inspect.isclass(obj) and issubclass(obj, Module):
+                autowire_module(self.app, obj)
             elif inspect.isfunction(obj):
                 endpoint_metas = get_endpoint_metas(obj)
                 event_subscriber_metas = get_event_subscriber_metas(obj)
