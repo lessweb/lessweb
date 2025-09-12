@@ -30,7 +30,7 @@ jobs:
         python -m pip install -e ".[test]"
     - name: Lint with flake8
       run: |
-        flake8 lessweb tests --count --ignore=E501 --show-source --statistics
+        flake8 lessweb tests --count --ignore=E501,W293 --show-source --statistics
     - name: Lint with mypy
       run: |
         mypy lessweb

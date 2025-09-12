@@ -55,11 +55,11 @@ class UpperFilter(Middleware):
 async def test_request_stack(aiohttp_client):
     app = web.Application()
     bridge = Bridge(app=app)
+    bridge.middlewares(UpperFilter)
     bridge.scan(
         put_edit_user,
         post_create_user,
         post_user_expect_eof,
-        UpperFilter,
     )
     client = await aiohttp_client(app)
     resp = await client.put('/user', json={'name': 'John'})

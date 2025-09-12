@@ -22,6 +22,7 @@ from aiohttp.web import (
 )
 from aiojobs.aiohttp import setup as aiojobs_setup
 from dotenv import find_dotenv, load_dotenv
+from pydantic.json_schema import models_json_schema
 
 from .ioc import (
     APP_BRIDGE_KEY,
@@ -36,6 +37,7 @@ from .ioc import (
     autowire_module,
     get_endpoint_metas,
     get_event_subscriber_metas,
+    get_pydantic_models_from_endpoint,
     make_middleware,
 )
 from .typecast import TypeCast
@@ -120,6 +122,7 @@ class Bridge:
     config_file: Optional[str]
     config: dict[str, Any]
     bootstrap_config: LesswebBootstrapConfig
+    endpoint_models: list[Type[pydantic.BaseModel]]
 
     @staticmethod
     def get_bridge(app: Application) -> 'Bridge':
@@ -147,6 +150,7 @@ class Bridge:
         if self.bootstrap_config.enable_global_error_handling:
             logging.debug('add global_error_handling middleware')
             self.app.middlewares.append(global_error_handler)
+        self.endpoint_models = []
 
     def _load_config(self) -> LesswebBootstrapConfig:
         if env := environ.get('ENV'):
@@ -245,6 +249,7 @@ class Bridge:
                                 path=endpoint_meta.path,
                                 handler=autowire_handler(obj),
                             )
+                        self.endpoint_models.extend(get_pydantic_models_from_endpoint(obj))
                 if event_subscriber_metas:
                     if not inspect.iscoroutinefunction(obj):
                         raise TypeError(
@@ -263,6 +268,17 @@ class Bridge:
             self.app.on_cleanup.append(signal_handler)
         for signal_handler in reversed(self.app[APP_ON_SHUTDOWN_KEY]):
             self.app.on_shutdown.append(signal_handler)
+
+    def dump_openapi_components(self) -> dict:
+        _, schemas = models_json_schema(
+            [(model, "validation") for model in self.endpoint_models],
+            ref_template="#/components/schemas/{model}",
+        )
+        return {
+            "components": {
+                "schemas": schemas.get('$defs'),
+            }
+        }
 
     def run_app(self, **kwargs) -> None:
         run_app(

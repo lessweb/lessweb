@@ -32,6 +32,23 @@ def _pydantic_encoder(obj):
     raise TypeError
 
 
+def check_pydantic_model_or_list(tp) -> Type[pydantic.BaseModel] | None:
+    if inspect.isclass(tp) and issubclass(tp, pydantic.BaseModel):
+        return tp
+    type_inspect_result = inspect_type(tp)
+    tp_args = type_inspect_result[1] if len(
+        type_inspect_result) == 2 else None
+    if is_list_type(tp):
+        if not tp_args:
+            return None
+        if inspect.isclass(tp_args) and issubclass(tp_args, pydantic.BaseModel):
+            return tp_args
+        else:
+            return None
+    else:
+        return None
+
+
 def parse_csv(csv_text: str) -> List[str]:
     """
     Parse a single line of CSV text into a list of strings.
@@ -56,7 +73,9 @@ def future_typed_dict_keys(tp):
 
 
 def is_typeddict(tp) -> bool:
-    return inspect.isclass(tp) and issubclass(tp, dict) and future_typed_dict_keys(tp)
+    if inspect.isclass(tp) and issubclass(tp, dict) and future_typed_dict_keys(tp):
+        return True
+    return False
 
 
 def inspect_type(tp):

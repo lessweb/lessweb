@@ -30,7 +30,7 @@ from aiohttp.web import (
 )
 
 from lessweb.annotation import DefaultFactory, Endpoint, OnEvent, TextResponse
-from lessweb.typecast import TypeCast
+from lessweb.typecast import TypeCast, check_pydantic_model_or_list
 from lessweb.utils import absolute_ref
 
 ENDPOINT_TYPE: TypeAlias = Callable[..., Awaitable[Any]]
@@ -425,7 +425,7 @@ def autowire_handler(sp_endpoint: ENDPOINT_TYPE, background: bool = False) -> HA
         result = await sp_endpoint(*args, **kwargs)
         if isinstance(result, StreamResponse):
             return result
-        if inspect.isclass(response_type) and issubclass(response_type, pydantic.BaseModel):
+        elif inspect.isclass(response_type) and issubclass(response_type, pydantic.BaseModel):
             return rest_response(response_type.model_validate(result))
         elif isinstance(result, (dict, list)) or is_dataclass(result) or isinstance(result, pydantic.BaseModel):
             return rest_response(result)
@@ -441,6 +441,19 @@ def autowire_handler(sp_endpoint: ENDPOINT_TYPE, background: bool = False) -> HA
     if background:
         setattr(aio_route_endpoint, BACKGROUND_ANNOTAION_KEY, True)
     return aio_route_endpoint
+
+
+def get_pydantic_models_from_endpoint(sp_endpoint: ENDPOINT_TYPE) -> list[Type[pydantic.BaseModel]]:
+    result = []
+    for _, (depends_type, _, kind) in func_arg_spec(sp_endpoint).items():
+        if kind == POSITIONAL_ONLY:
+            if t := check_pydantic_model_or_list(depends_type):
+                result.append(t)
+    for name, depends_type in get_type_hints(sp_endpoint, include_extras=False).items():
+        if name == 'return':
+            if t := check_pydantic_model_or_list(depends_type):
+                result.append(t)
+    return result
 
 
 def get_endpoint_metas(fn) -> list[Endpoint]:
