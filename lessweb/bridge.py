@@ -10,6 +10,7 @@ from typing import Any, Callable, Literal, Optional, Type, TypeVar
 
 import pydantic
 import toml
+from aiohttp.test_utils import make_mocked_request
 from aiohttp.web import (
     AppKey,
     Application,
@@ -33,6 +34,8 @@ from .ioc import (
     APP_ON_STARTUP_KEY,
     Middleware,
     Module,
+    Service,
+    autowire,
     autowire_handler,
     autowire_module,
     get_endpoint_metas,
@@ -130,7 +133,7 @@ class Bridge:
 
     def __init__(self, config: Optional[str] = None, app: Optional[Application] = None) -> None:
         """
-        config: path to config file
+        config: path to config file/directory
         app: aiohttp application
         """
         if app is None:
@@ -231,10 +234,15 @@ class Bridge:
 
     def scan(self, *packages) -> None:
         imported_modules = scan_import(packages)
+        temp_req = make_mocked_request('POST', '/__lessweb__/scan', app=self.app)
         ref_set: set[str] = set()
         for ref, obj in imported_modules.items():
-            if inspect.isclass(obj) and issubclass(obj, Module):
-                autowire_module(self.app, obj)
+            if inspect.isclass(obj):
+                if issubclass(obj, Module):
+                    autowire_module(self.app, obj)
+                elif issubclass(obj, (Service, Middleware)):
+                    # Avoid situations where modules with indirect dependencies are not loaded automatically
+                    autowire(temp_req, obj)
             elif inspect.isfunction(obj):
                 endpoint_metas = get_endpoint_metas(obj)
                 event_subscriber_metas = get_event_subscriber_metas(obj)
@@ -270,6 +278,21 @@ class Bridge:
             self.app.on_shutdown.append(signal_handler)
 
     def dump_openapi_components(self) -> dict:
+        """
+        Returns a dict containing the OpenAPI components for the application.
+
+        The returned dict will have the following structure:
+        {
+            "components": {
+                "schemas": {...}
+            }
+        }
+
+        The schemas dict will contain the OpenAPI schema definitions for each of the
+        endpoint models in the application.
+
+        :return: dict containing OpenAPI components
+        """
         _, schemas = models_json_schema(
             [(model, "validation") for model in self.endpoint_models],
             ref_template="#/components/schemas/{model}",
