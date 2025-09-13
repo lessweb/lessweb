@@ -29,9 +29,9 @@ from aiohttp.web import (
     middleware,
 )
 
-from lessweb.annotation import DefaultFactory, Endpoint, OnEvent, TextResponse
-from lessweb.typecast import TypeCast, check_pydantic_model_or_list
-from lessweb.utils import absolute_ref
+from .annotation import Bean, DefaultFactory, Endpoint, OnEvent, TextResponse
+from .typecast import TypeCast, check_pydantic_model_or_list
+from .utils import absolute_ref
 
 ENDPOINT_TYPE: TypeAlias = Callable[..., Awaitable[Any]]
 HANDLER_TYPE: TypeAlias = Callable[[Request], Awaitable[Any]]
@@ -47,6 +47,7 @@ APP_ON_STARTUP_KEY = 'lessweb.on_startup'
 APP_ON_CLEANUP_KEY = 'lessweb.on_cleanup'
 APP_ON_SHUTDOWN_KEY = 'lessweb.on_shutdown'
 BACKGROUND_ANNOTAION_KEY = 'lessweb.background'
+BEAN_MAP_KEY = 'lessweb.bean_map'
 
 
 class Module:
@@ -258,16 +259,23 @@ def autowire(request: Request, cls: Type[U]) -> U:
     assert inspect.isclass(cls), f'Can only autowire normal class: {cls}'
     if cls is Request:
         return request  # type: ignore
-    assert issubclass(cls, (Middleware, Service)), \
-        f'Can only autowire Middleware or Service: {cls}'
     ref = absolute_ref(cls)
+    is_bean = False
+    if ref not in request.app[BEAN_MAP_KEY]:
+        assert issubclass(cls, (Middleware, Service)), \
+            f'Can only autowire Middleware or Service: {cls}'
+    else:
+        is_bean = True
     if ref in request:
         if request[ref] is None:
             raise RuntimeError(f'circular dependency detected: {cls}')
         return request[ref]
     request[ref] = None  # mark as inited
     logging.debug('autowire-> %s', cls)
-    depends_on = get_depends_on(cls.__init__)
+    if is_bean:
+        depends_on = request.app[BEAN_MAP_KEY][ref]
+    else:
+        depends_on = get_depends_on(cls.__init__)
     args: list = []
     for _, depends_type in depends_on:
         if inspect.isclass(depends_type) and issubclass(depends_type, Module):
@@ -473,5 +481,16 @@ def get_text_response_metas(fn) -> list[TextResponse]:
         if isinstance(meta, TextResponse):
             result.append(meta)
         elif inspect.isclass(meta) and issubclass(meta, TextResponse):
+            result.append(meta())
+    return result
+
+
+def get_bean_metas(fn) -> list[Bean]:
+    _, func_metas = func_annotated_metas(fn)
+    result = []
+    for meta in func_metas:
+        if isinstance(meta, Bean):
+            result.append(meta)
+        elif inspect.isclass(meta) and issubclass(meta, Bean):
             result.append(meta())
     return result

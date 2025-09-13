@@ -6,7 +6,7 @@ import sys
 from logging.handlers import TimedRotatingFileHandler
 from os import environ
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, Type, TypeVar
+from typing import Any, Callable, Literal, Optional, Type, TypeVar, get_type_hints
 
 import pydantic
 import toml
@@ -32,12 +32,14 @@ from .ioc import (
     APP_ON_CLEANUP_KEY,
     APP_ON_SHUTDOWN_KEY,
     APP_ON_STARTUP_KEY,
+    BEAN_MAP_KEY,
     Middleware,
     Module,
     Service,
     autowire,
     autowire_handler,
     autowire_module,
+    get_bean_metas,
     get_endpoint_metas,
     get_event_subscriber_metas,
     get_pydantic_models_from_endpoint,
@@ -147,6 +149,7 @@ class Bridge:
         self.app[APP_ON_STARTUP_KEY] = []
         self.app[APP_ON_CLEANUP_KEY] = []
         self.app[APP_ON_SHUTDOWN_KEY] = []
+        self.app[BEAN_MAP_KEY] = {}
         self.bootstrap_config = self._load_config()
         self._load_logger(self.bootstrap_config)
         self._load_orjson(self.bootstrap_config)
@@ -246,6 +249,7 @@ class Bridge:
             elif inspect.isfunction(obj):
                 endpoint_metas = get_endpoint_metas(obj)
                 event_subscriber_metas = get_event_subscriber_metas(obj)
+                bean_metas = get_bean_metas(obj)
                 if endpoint_metas:
                     if not inspect.iscoroutinefunction(obj):
                         raise TypeError(
@@ -267,6 +271,16 @@ class Bridge:
                             self.app[APP_EVENT_SUBSCRIBER_KEY].append(
                                 (event_subscriber_meta,
                                  autowire_handler(obj, background=event_subscriber_meta.background)))
+                if bean_metas:
+                    if inspect.iscoroutinefunction(obj):
+                        raise TypeError(
+                            f'bean must not be coroutine function: {obj}')
+                    for name, bean_type in get_type_hints(obj, include_extras=False).items():
+                        if name == 'return':
+                            if not inspect.isclass(bean_type):
+                                raise TypeError(f'bean return type must be class: {obj} {bean_type}')
+                            bean_type_ref = absolute_ref(bean_type)
+                            self.app[BEAN_MAP_KEY][bean_type_ref] = obj
             else:
                 pass
         aiojobs_setup(self.app)
