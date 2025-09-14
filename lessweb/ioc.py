@@ -29,7 +29,7 @@ from aiohttp.web import (
     middleware,
 )
 
-from .annotation import Bean, DefaultFactory, Endpoint, OnEvent, TextResponse
+from .annotation import DefaultFactory, Endpoint, OnEvent, TextResponse
 from .typecast import TypeCast, check_pydantic_model_or_list
 from .utils import absolute_ref
 
@@ -39,6 +39,7 @@ POSITIONAL_ONLY = 0
 KEYWORD_ONLY = 3
 
 
+LESSWEB_SCAN_PATH = '/__lessweb__/__scan__'
 REQUEST_STACK_KEY = 'lessweb.request_stack'
 APP_CONFIG_KEY = 'lessweb.config'
 APP_BRIDGE_KEY = 'lessweb.bridge'
@@ -237,7 +238,7 @@ def autowire_module(app: Application, cls: Type[T]) -> T:
             raise RuntimeError(f'circular dependency detected: {cls}')
         return app[ref]  # type: ignore
     app[ref] = None  # mark as inited
-    logging.debug('autowire_module-> %s', cls)
+    logging.debug('autowire_module-> %s %s', ref, cls)
     depends_on = get_depends_on(cls.__init__)
     args: list = []
     for _, depends_type in depends_on:
@@ -271,9 +272,9 @@ def autowire(request: Request, cls: Type[U]) -> U:
             raise RuntimeError(f'circular dependency detected: {cls}')
         return request[ref]
     request[ref] = None  # mark as inited
-    logging.debug('autowire-> %s', cls)
+    logging.debug('autowire-> %s %s', ref, cls)
     if is_bean:
-        depends_on = request.app[BEAN_MAP_KEY][ref]
+        depends_on = get_depends_on(request.app[BEAN_MAP_KEY][ref])
     else:
         depends_on = get_depends_on(cls.__init__)
     args: list = []
@@ -282,7 +283,12 @@ def autowire(request: Request, cls: Type[U]) -> U:
             args.append(autowire_module(request.app, depends_type))
         else:
             args.append(autowire(request, depends_type))
-    request[ref] = singleton = cls(*args)
+    if request.path == LESSWEB_SCAN_PATH:
+        request[ref] = singleton = '✔'
+    elif is_bean:
+        request[ref] = singleton = request.app[BEAN_MAP_KEY][ref](*args)
+    else:
+        request[ref] = singleton = cls(*args)
     return singleton  # type: ignore
 
 
@@ -464,6 +470,14 @@ def get_pydantic_models_from_endpoint(sp_endpoint: ENDPOINT_TYPE) -> list[Type[p
     return result
 
 
+def get_depends_types_from_endpoint(sp_endpoint: ENDPOINT_TYPE) -> list[Type]:
+    result = []
+    for _, (depends_type, _, kind) in func_arg_spec(sp_endpoint).items():
+        if kind != KEYWORD_ONLY and kind != POSITIONAL_ONLY:
+            result.append(depends_type)
+    return result
+
+
 def get_endpoint_metas(fn) -> list[Endpoint]:
     _, func_metas = func_annotated_metas(fn)
     return [meta for meta in func_metas if isinstance(meta, Endpoint)]
@@ -481,16 +495,5 @@ def get_text_response_metas(fn) -> list[TextResponse]:
         if isinstance(meta, TextResponse):
             result.append(meta)
         elif inspect.isclass(meta) and issubclass(meta, TextResponse):
-            result.append(meta())
-    return result
-
-
-def get_bean_metas(fn) -> list[Bean]:
-    _, func_metas = func_annotated_metas(fn)
-    result = []
-    for meta in func_metas:
-        if isinstance(meta, Bean):
-            result.append(meta)
-        elif inspect.isclass(meta) and issubclass(meta, Bean):
             result.append(meta())
     return result

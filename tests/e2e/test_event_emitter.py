@@ -26,6 +26,7 @@ async def test_event_emitter(aiohttp_client):
     app = web.Application()
     bridge = Bridge(app=app)
     bridge.scan(EventEmitter, handle_test_event, trigger_test_event)
+    bridge.ready()
     client = await aiohttp_client(app)
     resp = await client.get('/')
     assert resp.status == 200

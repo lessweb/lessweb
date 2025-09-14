@@ -86,7 +86,3 @@ class Html(TextResponse):
 class PlainText(TextResponse):
     def __init__(self):
         super().__init__('text/plain')
-
-
-class Bean:
-    pass
