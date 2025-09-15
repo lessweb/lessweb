@@ -284,11 +284,11 @@ def autowire(request: Request, cls: Type[U]) -> U:
         else:
             args.append(autowire(request, depends_type))
     if request.path == LESSWEB_SCAN_PATH:
-        request[ref] = singleton = '✔'
+        request[ref] = singleton = '✔'  # type: ignore
     elif is_bean:
-        request[ref] = singleton = request.app[BEAN_MAP_KEY][ref](*args)
+        request[ref] = singleton = request.app[BEAN_MAP_KEY][ref](*args)  # type: ignore
     else:
-        request[ref] = singleton = cls(*args)
+        request[ref] = singleton = cls(*args)  # type: ignore
     return singleton  # type: ignore
 
 
@@ -461,12 +461,12 @@ def get_pydantic_models_from_endpoint(sp_endpoint: ENDPOINT_TYPE) -> list[Type[p
     result = []
     for _, (depends_type, _, kind) in func_arg_spec(sp_endpoint).items():
         if kind == POSITIONAL_ONLY:
-            if t := check_pydantic_model_or_list(depends_type):
-                result.append(t)
+            if models := check_pydantic_model_or_list(depends_type):
+                result.extend(models)
     for name, depends_type in get_type_hints(sp_endpoint, include_extras=False).items():
         if name == 'return':
-            if t := check_pydantic_model_or_list(depends_type):
-                result.append(t)
+            if models := check_pydantic_model_or_list(depends_type):
+                result.extend(models)
     return result
 
 

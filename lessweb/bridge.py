@@ -252,6 +252,7 @@ class Bridge:
                     self.app[BEAN_MAP_KEY][bean_type_ref] = bean_func
 
     def middlewares(self, *middlewares) -> None:
+        self.scan(*middlewares)
         for m in middlewares:
             if inspect.isclass(m) and issubclass(m, Middleware):
                 self.app.middlewares.append(make_middleware(m))
@@ -335,6 +336,7 @@ class Bridge:
             self.app.on_cleanup.append(signal_handler)
         for signal_handler in reversed(self.app[APP_ON_SHUTDOWN_KEY]):
             self.app.on_shutdown.append(signal_handler)
+        logging.info(f'Web application ready to serve on port {self.bootstrap_config.port}')
 
     def run_app(self, ready=True, **kwargs) -> None:
         if ready:

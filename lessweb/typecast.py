@@ -32,21 +32,15 @@ def _pydantic_encoder(obj):
     raise TypeError
 
 
-def check_pydantic_model_or_list(tp) -> Type[pydantic.BaseModel] | None:
+def check_pydantic_model_or_list(tp) -> list[Type[pydantic.BaseModel]]:
+    if isinstance(tp, str):
+        tp = classname_dict[tp]
     if inspect.isclass(tp) and issubclass(tp, pydantic.BaseModel):
-        return tp
-    type_inspect_result = inspect_type(tp)
-    tp_args = type_inspect_result[1] if len(
-        type_inspect_result) == 2 else None
-    if is_list_type(tp):
-        if not tp_args:
-            return None
-        if inspect.isclass(tp_args) and issubclass(tp_args, pydantic.BaseModel):
-            return tp_args
-        else:
-            return None
-    else:
-        return None
+        return [tp]
+    tp_args = typing_inspect.get_args(tp)  # 支持Union和泛型
+    if tp_args == ():
+        return []
+    return [t for t in tp_args if inspect.isclass(t) and issubclass(t, pydantic.BaseModel)]
 
 
 def parse_csv(csv_text: str) -> List[str]:
@@ -214,7 +208,10 @@ class TypeCast:
             if not tp_args:
                 return items  # type: ignore
             if not inspect.isclass(tp_args) or not issubclass(tp_args, pydantic.BaseModel):
-                raise TypeError(f'list type {tp=} is not supported')
+                raise TypeError(
+                    f'JSON validation error: list type {tp=} is not supported. '
+                    f'Only list[pydantic.BaseModel] is supported for JSON validation. '
+                    f'Expected format: list[YourPydanticModel], got {tp_args=}')
             result = []
             for item in items:
                 if not isinstance(item, dict):
@@ -227,7 +224,10 @@ class TypeCast:
             return result  # type: ignore
         else:
             if not inspect.isclass(tp) or not issubclass(tp, pydantic.BaseModel):
-                raise TypeError(f'type {tp=} is not supported')
+                raise TypeError(
+                    f'JSON validation error: type {tp=} is not supported. '
+                    f'Only pydantic.BaseModel subclasses are supported for JSON validation. '
+                    f'Please ensure your type inherits from pydantic.BaseModel or use list[pydantic.BaseModel] for lists.')
             try:
                 return tp.model_validate_json(data)  # type: ignore
             except pydantic.ValidationError as e:
