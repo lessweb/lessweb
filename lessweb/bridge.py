@@ -118,7 +118,12 @@ def load_module_config(app: Application, module_config_key: str, module_config_c
         result = module_config_cls.model_validate(
             module_config)  # type: ignore
     else:
-        raise TypeError(f'{module_config_cls=} is not supported')
+        raise TypeError(
+            f"Configuration class '{module_config_cls.__name__ if hasattr(module_config_cls, '__name__') else module_config_cls}' "
+            f"must be a subclass of pydantic.BaseModel. "
+            f"Got type: {type(module_config_cls).__name__}. "
+            f"Module config key: '{module_config_key}'"
+        )
     app[app_key] = result
     return result
 
@@ -203,8 +208,10 @@ class Bridge:
         logger_conf = config.logger
         if not logger_conf:
             return
-        logger = logging.getLogger(logger_conf.name)
-        logger.setLevel(logger_conf.level)
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logger_conf.level)
+        # clear root logger handlers to avoid duplicate output
+        root_logger.handlers.clear()
         formatter = logging.Formatter(logger_conf.format)
         if logger_conf.stream == 'file':
             rotating_conf = logger_conf.rotating or LesswebLoggerRotatingConfig()
@@ -216,13 +223,16 @@ class Bridge:
             )
             file_handler.suffix = rotating_conf.suffix
             file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
-            logging.root = logger  # type: ignore
+            root_logger.addHandler(file_handler)
         else:
             stream = sys.stdout if logger_conf.stream == 'stdout' else sys.stderr
             stream_handler = logging.StreamHandler(stream)
             stream_handler.setFormatter(formatter)
-            logger.addHandler(stream_handler)
+            root_logger.addHandler(stream_handler)
+        # if exists named logger, also configure it
+        if logger_conf.name:
+            named_logger = logging.getLogger(logger_conf.name)
+            named_logger.setLevel(logger_conf.level)
 
     def _load_orjson(self, config: LesswebBootstrapConfig) -> None:
         TypeCast.init_orjson_option(config.orjson_option)
