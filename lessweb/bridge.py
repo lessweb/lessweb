@@ -183,10 +183,21 @@ class Bridge:
                     f'config file not found: {self.config_file}')
             elif os.path.isdir(self.config_file):
                 config_dir = Path(self.config_file)
+                env = os.environ.get('ENV', '')
+                toml_groups = {}
                 for config_path in config_dir.iterdir():
-                    if config_path.is_file():
-                        with open(config_path) as f:
-                            config.update(toml.loads(f.read()))
+                    if not config_path.is_file() or config_path.suffix != '.toml' or config_path.name.startswith('.'):
+                        continue
+                    stem = config_path.stem
+                    if '.' in stem and env and stem.endswith(f'.{env}'):
+                        base_name = stem[:-len(f'.{env}')]
+                        toml_groups[base_name] = config_path
+                    elif '.' not in stem:
+                        toml_groups.setdefault(stem, config_path)
+                # Load selected TOML files
+                for config_path in toml_groups.values():
+                    with open(config_path) as f:
+                        config.update(toml.loads(f.read()))
             else:
                 config.update(toml.loads(open(self.config_file).read()))
         config.setdefault('lessweb', {})
