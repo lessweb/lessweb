@@ -226,8 +226,13 @@ class Bridge:
         formatter = logging.Formatter(logger_conf.format)
         if logger_conf.stream == 'file':
             rotating_conf = logger_conf.rotating or LesswebLoggerRotatingConfig()
+            log_file = logger_conf.file or 'log.txt'
+            # Auto-create directory if it doesn't exist
+            log_dir = os.path.dirname(log_file)
+            if log_dir and not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
             file_handler = TimedRotatingFileHandler(
-                logger_conf.file or 'log.txt',
+                log_file,
                 when=rotating_conf.when,
                 interval=rotating_conf.interval,
                 backupCount=rotating_conf.backup_count
