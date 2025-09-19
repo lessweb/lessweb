@@ -12,7 +12,6 @@ from typing import (
     Type,
     TypeAlias,
     TypeVar,
-    Union,
     get_origin,
     get_type_hints,
 )
