@@ -324,7 +324,7 @@ def rest_response(
     return response
 
 
-def get_request_stack(request: Request) -> list[Union[str, bytes]]:
+def get_request_stack(request: Request) -> list[bytes]:
     """
     获取请求对象中保存的请求堆栈。
 
@@ -341,14 +341,13 @@ def get_request_stack(request: Request) -> list[Union[str, bytes]]:
     return request[REQUEST_STACK_KEY]
 
 
-def push_request_stack(request: Request, value: Union[str, bytes]):
+def push_request_stack(request: Request, value: bytes):
     """
     向请求对象的请求堆栈中添加一个值。
 
     参数：
         request (Request): aiohttp 的请求对象，其内部包含用于存储请求处理过程数据的堆栈。
-        value (str | bytes): 要添加到堆栈中的数据值。
-                            注意：当前逻辑要求 value 必须为 bytes 类型，否则将抛出 TypeError。
+        value (bytes): 要添加到堆栈中的数据值，必须为 bytes 类型。
 
     使用示例：
         在一个Middleware中，可能先对原始请求体进行读取和预处理：
@@ -365,7 +364,7 @@ def push_request_stack(request: Request, value: Union[str, bytes]):
         获取堆栈列表，并对堆栈进行 pop 操作，将最后一次推入的数据提取出来作为 positional-only 参数传递给目标处理函数。
     """
     if not isinstance(value, bytes):
-        raise TypeError('value must be str or bytes')
+        raise TypeError('value must be bytes')
     request_stack = get_request_stack(request)
     request_stack.append(value)
 
@@ -393,7 +392,7 @@ def autowire_handler(sp_endpoint: ENDPOINT_TYPE, background: bool = False) -> HA
         for name, (depends_type, default, kind) in func_arg_spec(sp_endpoint).items():
             if kind == POSITIONAL_ONLY:
                 request_stack = get_request_stack(request)
-                request_data: Union[str, bytes]
+                request_data: bytes
                 if not args and not request_stack:
                     request_data = await request.read()
                 elif not request_stack:
@@ -401,10 +400,12 @@ def autowire_handler(sp_endpoint: ENDPOINT_TYPE, background: bool = False) -> HA
                         f'request stack is empty for param: {name}')
                 else:
                     request_data = request_stack.pop()
-                if depends_type in (bytes, str):
-                    if not isinstance(request_data, depends_type):
+                if depends_type is bytes:
+                    if not isinstance(request_data, bytes):
                         raise TypeError(
-                            f'positional only param: {name} must be {depends_type} not {type(request_data)}')
+                            f'positional only param: {name} must be bytes not {type(request_data)}')
+                    args.append(request_data)
+                    continue
                 try:
                     parsed_data = TypeCast.validate_json(
                         request_data, depends_type)
