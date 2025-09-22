@@ -169,7 +169,7 @@ class Bridge:
             env_file = f'.env.{env}'
             assert load_dotenv(env_file, override=True), f'load dotenv file failed: {env_file}'
         elif os.path.exists('.env'):
-            load_dotenv('.env', override=True)
+            assert load_dotenv('.env', override=True), 'load dotenv file failed: .env'
         self.config = self._load_config_with_env()
         self.app[APP_CONFIG_KEY] = self.config
         return load_module_config(self.app, 'lessweb', LesswebBootstrapConfig)
