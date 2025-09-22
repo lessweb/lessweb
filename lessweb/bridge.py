@@ -22,7 +22,7 @@ from aiohttp.web import (
     run_app,
 )
 from aiojobs.aiohttp import setup as aiojobs_setup
-from dotenv import find_dotenv, load_dotenv
+from dotenv import load_dotenv
 from pydantic.json_schema import models_json_schema
 
 from .ioc import (
