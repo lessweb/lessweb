@@ -1,0 +1,3 @@
+[auth_gateway]
+jwt_salt = 'xxxxxxxxxx'
+expire_seconds = 86400

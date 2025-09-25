@@ -1,0 +1,13 @@
+[lessweb]
+port = 8080
+enable_global_error_handling = false
+
+[lessweb.logger]
+format = '%(asctime)s %(name)s %(filename)s:%(lineno)d %(levelname)s - %(message)s'
+level = 'INFO'
+stream = 'file'
+name = 'umay-task-center'
+file = 'logs/umay-task-center.log'
+when = 'd'
+interval = 1
+backup_count = 3

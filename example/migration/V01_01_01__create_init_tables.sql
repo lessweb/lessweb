@@ -1,0 +1,11 @@
+-- Create user table
+CREATE TABLE user (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    userName VARCHAR(100) NOT NULL,
+    userPassword VARCHAR(64) NOT NULL,
+
+    -- Add indexes
+    INDEX idx_user_name (userName)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
