@@ -2,10 +2,11 @@ import time
 from typing import Annotated, Any, Awaitable, Callable
 
 import jwt
-import lessweb
-from aiohttp.web import Application, HTTPUnauthorized, Request, Response
-from lessweb import Middleware, Module
+from aiohttp.web import Application, HTTPForbidden, HTTPUnauthorized, Request, Response
 from pydantic import BaseModel
+
+import lessweb
+from lessweb import Middleware, Module
 
 
 class AuthGatewayConfig(BaseModel):
@@ -14,7 +15,7 @@ class AuthGatewayConfig(BaseModel):
 
 
 class AuthUser(BaseModel):
-    id: int
+    id: str
     role: str
 
 
@@ -46,22 +47,21 @@ class AuthGatewayMiddleware(Middleware):
     user: AuthUser
 
     def __init__(self, gateway: AuthGateway) -> None:
-        self.user = AuthUser(id=0, role='guest')
+        self.user = AuthUser(id='none', role='guest')
         self.gateway = gateway
 
     async def on_request(self, request: Request, handler: Callable[[Request], Awaitable[Any]]) -> Response:
-        if not request.path.startswith('/public/'):
+        path = request.path
+        if not path.startswith('/public/') and path != '/':
             auth_token = request.headers.getone('Authorization', '')
             token = auth_token[7:] if auth_token.startswith('Bearer ') else auth_token
             try:
                 if token and (auth_payload := self.gateway.decrypt_jwt(token)):
-                    self.user = AuthUser(id=int(auth_payload['uid']), role=auth_payload["sub"])
+                    self.user = AuthUser(id=auth_payload['uid'], role=auth_payload["sub"])
                 else:
                     raise HTTPUnauthorized
             except Exception:
                 raise HTTPUnauthorized
+            if not path.startswith((f'/{self.user.role}/', '/common/')):
+                raise HTTPForbidden
         return await handler(request)
-
-
-def auth_user_bean(auth_gateway: AuthGatewayMiddleware) -> AuthUser:
-    return auth_gateway.user

@@ -5,42 +5,39 @@ from commondao.annotation import TableId
 from pydantic import BaseModel
 
 
+# Entity for querying users
 class User(BaseModel):
-    """用户查询实体"""
-    id: Annotated[int, TableId('user')]
-    createdAt: datetime
-    updatedAt: datetime
-    userName: str
+    """
+    用户 - 用于查询
+    """
+    id: Annotated[int, TableId('tbl_user')]
+    nickname: Optional[str]
+    openid: str
+    totalCount: int
+    usedCount: int
+    createTime: datetime
+    updateTime: datetime
 
 
-class UserForPassword(BaseModel):
-    """用户密码验证实体"""
-    id: Annotated[int, TableId('user')]
-    userName: str
-    userPassword: str
-
-
+# Entity for inserting users
 class UserInsert(BaseModel):
-    """用户插入实体"""
-    id: Annotated[Optional[int], TableId('user')] = None
-    userName: str
-    userPassword: str
+    """
+    用户 - 用于插入
+    """
+    id: Annotated[Optional[int], TableId('tbl_user')] = None  # Auto-increment
+    nickname: Optional[str] = None
+    openid: str
+    totalCount: Optional[int] = 0
+    usedCount: Optional[int] = 0
 
 
+# Entity for updating users
 class UserUpdate(BaseModel):
-    """用户更新实体"""
-    id: Annotated[int, TableId('user')]
-    userName: Optional[str] = None
-    userPassword: Optional[str] = None
-
-
-class LoginRequest(BaseModel):
-    """登录请求"""
-    userName: str
-    password: str
-
-
-class ChangePasswordRequest(BaseModel):
-    """修改密码请求"""
-    oldPassword: str
-    newPassword: str
+    """
+    用户 - 用于更新
+    """
+    id: Annotated[int, TableId('tbl_user')]
+    nickname: Optional[str] = None
+    openid: Optional[str] = None
+    totalCount: Optional[int] = None
+    usedCount: Optional[int] = None

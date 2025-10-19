@@ -1,80 +1,52 @@
-import hashlib
+"""
+用户相关接口
+提供用户登录、用户信息查询等功能
+"""
+
 from typing import Annotated
 
+from aiohttp.web import HTTPNotFound
 from commondao import Commondao
-from lessweb.annotation import Get, Post
-from pydantic import BaseModel
+from src.entity.user import User
+from src.service.auth_service import CurrentAdmin, CurrentUser
 
-from shared.auth_gateway.auth_gateway import AuthGateway, AuthUser
-from src.entity.user import (
-    ChangePasswordRequest,
-    LoginRequest,
-    User,
-    UserForPassword,
-    UserInsert,
-    UserUpdate,
-)
+from lessweb.annotation import Get
 
 
-class LoginResponse(BaseModel):
-    """登录响应"""
-    user: User
-    token: str
-
-
-def _hash_password(password: str) -> str:
-    """对密码进行SHA256哈希"""
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
-
-
-async def login(login_data: LoginRequest, /, auth_gateway: AuthGateway, dao: Commondao) -> Annotated[LoginResponse, Post('/public/login')]:
-    """用户登录"""
-    hashed_password = _hash_password(login_data.password)
-
-    # 查询用户（使用UserForPassword来验证密码）
-    user_with_password = await dao.get_by_key(UserForPassword, key={'userName': login_data.userName, 'userPassword': hashed_password})
-    assert user_with_password, "用户名或密码错误"
-
-    # 返回不包含密码的用户信息
-    user = await dao.get_by_id_or_fail(User, user_with_password.id)
-
-    # 生成JWT token
-    token = auth_gateway.encrypt_jwt(str(user.id), "user")
-
-    return LoginResponse(user=user, token=token)
-
-
-async def get_current_user(auth_user: AuthUser, dao: Commondao) -> Annotated[User, Get('/me')]:
+async def get_current_user(current_user: CurrentUser) -> Annotated[User, Get('/user/me')]:
     """查询当前登录用户信息"""
-    user = await dao.get_by_id_or_fail(User, auth_user.id)
+    user = await current_user.get()
     return user
 
 
-async def change_password(password_data: ChangePasswordRequest, /, auth_user: AuthUser, dao: Commondao) -> Annotated[dict, Post('/me/change-password')]:
-    """修改当前用户密码"""
-    # 验证旧密码
-    old_hashed = _hash_password(password_data.oldPassword)
-    user = await dao.get_by_id_or_fail(UserForPassword, auth_user.id)
-    assert user.userPassword == old_hashed, "旧密码错误"
+async def get_user_by_admin(
+    dao: Commondao,
+    current_admin: CurrentAdmin,
+    *,
+    user_id: int
+) -> Annotated[User, Get('/admin/user/{user_id}')]:
+    """管理员查询用户详情
 
-    # 更新密码
-    new_hashed = _hash_password(password_data.newPassword)
-    user_update = UserUpdate(id=auth_user.id, userPassword=new_hashed)
-    await dao.update_by_id(user_update)
+    GET /admin/user/{user_id}
 
-    return {'message': '密码修改成功'}
+    管理员查询指定用户的完整详情信息。
 
+    Path Parameters:
+        user_id: 要查询的用户ID
 
-async def init_user(dao: Commondao) -> Annotated[User, Get('/public/init-user')]:
-    """初始化用户：创建一个密码为12345678的初始用户"""
-    # 检查是否已存在用户
-    existing_users = await dao.select_all("SELECT * FROM user LIMIT 1", User)
-    assert not existing_users, "系统中已存在用户，无法初始化"
+    Returns:
+        User: 用户完整信息
 
-    # 创建初始用户
-    hashed_password = _hash_password("12345678")
-    initial_user = UserInsert(userName="admin", userPassword=hashed_password)
-    await dao.insert(initial_user)
-    user_id = dao.lastrowid()
-    user = await dao.get_by_id_or_fail(User, user_id)
+    Raises:
+        403: 管理员未登录或token无效
+        404: 用户不存在
+    """
+    # 验证管理员身份
+    _ = current_admin.id
+
+    # 查询用户
+    user = await dao.get_by_id(User, user_id)
+    if not user:
+        raise HTTPNotFound(text='User not found')
+
     return user
