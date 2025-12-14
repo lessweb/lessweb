@@ -35,6 +35,7 @@ test = [
     "pytest-asyncio",
     "pytest-aiohttp",
     "types-toml",
+    "types-PyYAML",
 ]
 
 [tool.setuptools.package-data]
