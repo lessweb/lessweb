@@ -471,6 +471,6 @@ class BadModule(Module):
 ## 最佳实践
 
 * 如果任务跟数据库相关，你必须先阅读`docs/commondao_readme.md`和`docs/commondao_reference.md`文档。
-* 如果任务跟web框架相关，必须新增/修改endpoint, event handler, module, middleware, bean, service等，你必须先阅读`docs/lessweb_quickstart.md`和`docs/lessweb_reference.md`文档。
+* 如果任务跟web框架相关，必须新增/修改endpoint, event handler, module, middleware, bean, service等，你必须先阅读`docs/lessweb_quickstart.md`、`docs/lessweb_reference.md`和`docs/lessweb_openapi.md`文档。
 * 文件命名规范：`src/controller`目录的文件后缀名为`_controller.py`，例如`task_controller.py`；`src/entity`目录文件没有特殊后缀名，例如`task.py`就包含`Task`, `TaskInsert`, `TaskUpdate`等实体类的实现。
 * 字段命名规范：数据库表名为蛇形风格；数据库表的字段为驼峰风格；跟前端交互的请求和返回字段为驼峰风格；其他普通字段为蛇形风格。

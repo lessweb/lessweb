@@ -1,7 +1,7 @@
 from typing import Any, Callable, Literal
 
 HTTP_METHOD_TYPE = Literal['GET', 'POST',
-                           'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD', 'TRACE', 'CONNECT']
+                           'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD', 'TRACE', 'CONNECT', '*']
 
 
 class Endpoint:
@@ -86,3 +86,8 @@ class Html(TextResponse):
 class PlainText(TextResponse):
     def __init__(self):
         super().__init__('text/plain')
+
+
+class Xml(TextResponse):
+    def __init__(self):
+        super().__init__('text/xml')

@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import sys
+import textwrap
 from logging.handlers import TimedRotatingFileHandler
 from os import environ
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any, Callable, Literal, Optional, Type, TypeVar, get_type_hin
 
 import pydantic
 import toml
+import yaml
 from aiohttp.test_utils import make_mocked_request
 from aiohttp.web import (
     AppKey,
@@ -22,7 +24,7 @@ from aiohttp.web import (
     run_app,
 )
 from aiojobs.aiohttp import setup as aiojobs_setup
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from pydantic.json_schema import models_json_schema
 
 from .ioc import (
@@ -44,6 +46,7 @@ from .ioc import (
     get_endpoint_metas,
     get_event_subscriber_metas,
     get_pydantic_models_from_endpoint,
+    get_text_response_metas,
     make_middleware,
 )
 from .typecast import TypeCast
@@ -65,6 +68,54 @@ async def global_error_handler(request: Request, handler: Callable) -> Response:
 
 def make_environ_key(key_path: str):
     return '_'.join(re.findall('[A-Z]+', key_path.upper()))
+
+
+def parse_handler_docstring(handler: Callable) -> dict:
+    """
+    Parse handler function docstring in YAML format.
+
+    Expected docstring format:
+    ```
+    summary: Brief description
+    description: Detailed description
+    tags:
+      - tag1
+      - tag2
+    parameters:
+      - name: param1
+        in: query
+        required: true
+        schema:
+          type: string
+    requestBody:
+      ...
+    responses:
+      200:
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelName'
+    ```
+
+    Returns a dict containing OpenAPI operation object fields.
+    """
+    docstring = inspect.getdoc(handler)
+    if not docstring:
+        return {}
+
+    try:
+        # Use textwrap.dedent to remove common leading whitespace
+        dedented = textwrap.dedent(docstring)
+        # Try to parse the dedented docstring as YAML
+        parsed = yaml.safe_load(dedented)
+        if isinstance(parsed, dict):
+            return parsed
+    except yaml.YAMLError:
+        pass
+
+    # If YAML parsing fails, return empty dict
+    return {}
 
 
 class LesswebLoggerRotatingConfig(pydantic.BaseModel):
@@ -134,6 +185,7 @@ class Bridge:
     config: dict[str, Any]
     bootstrap_config: LesswebBootstrapConfig
     endpoint_models: list[Type[pydantic.BaseModel]]
+    openapi_paths: dict[str, dict[str, Any]]  # path -> {method -> operation}
 
     @staticmethod
     def get_bridge(app: Application) -> 'Bridge':
@@ -163,13 +215,15 @@ class Bridge:
             logging.debug('add global_error_handling middleware')
             self.app.middlewares.append(global_error_handler)
         self.endpoint_models = []
+        self.openapi_paths = {}
 
     def _load_config(self) -> LesswebBootstrapConfig:
         if env := environ.get('ENV'):
-            env_file = f'.env.{env}'
-            assert load_dotenv(env_file, override=True), f'load dotenv file failed: {env_file}'
-        elif os.path.exists('.env'):
-            assert load_dotenv('.env', override=True), 'load dotenv file failed: .env'
+            env_file = find_dotenv(f'.env.{env}')
+            assert load_dotenv(
+                env_file, override=True), f'load dotenv file failed: {env_file}'
+        else:
+            load_dotenv(override=True)
         self.config = self._load_config_with_env()
         self.app[APP_CONFIG_KEY] = self.config
         return load_module_config(self.app, 'lessweb', LesswebBootstrapConfig)
@@ -264,6 +318,53 @@ class Bridge:
             else:
                 autowire(request, depends_type)
 
+    def _update_openapi_metadata(self, handler: Callable, endpoint_metas: list, handler_ref: str) -> None:
+        """
+        Update openapi_paths based on handler metadata.
+
+        Skip non-RESTful endpoints (those with TextResponse annotations like Html, PlainText).
+        Skip endpoints with wildcard method '*' (not compatible with OpenAPI spec).
+
+        Args:
+            handler: The endpoint handler function
+            endpoint_metas: List of Endpoint metadata objects
+            handler_ref: The absolute reference string of the handler
+        """
+        # Skip non-RESTful endpoints (Html, PlainText, TextResponse)
+        if get_text_response_metas(handler):
+            return
+
+        # Parse docstring to get OpenAPI operation details
+        docstring_data = parse_handler_docstring(handler)
+
+        # Extract function name from handler_ref (e.g., "src.endpoint.task.get_home" -> "get_home")
+        operation_id = handler_ref.split('.')[-1]
+
+        for endpoint_meta in endpoint_metas:
+            path = endpoint_meta.path
+            method = endpoint_meta.method
+
+            # Skip wildcard method '*' (not compatible with OpenAPI spec)
+            if method == '*':
+                continue
+
+            method = method.lower()
+
+            # Initialize path dict if not exists
+            if path not in self.openapi_paths:
+                self.openapi_paths[path] = {}
+
+            # Build operation object starting with operationId
+            operation = {'operationId': operation_id}
+
+            # Copy relevant fields from docstring
+            for key in ['summary', 'description', 'tags', 'parameters', 'requestBody', 'responses']:
+                if key in docstring_data:
+                    operation[key] = docstring_data[key]
+
+            # Store the operation
+            self.openapi_paths[path][method] = operation
+
     def beans(self, *beans) -> None:
         for bean_func in beans:
             if inspect.iscoroutinefunction(bean_func):
@@ -314,6 +415,7 @@ class Bridge:
                                 handler=autowire_handler(obj),
                             )
                         self.endpoint_models.extend(get_pydantic_models_from_endpoint(obj))
+                        self._update_openapi_metadata(obj, endpoint_metas, ref)
                 if event_subscriber_metas:
                     if not inspect.iscoroutinefunction(obj):
                         raise TypeError(
@@ -333,6 +435,7 @@ class Bridge:
 
         The returned dict will have the following structure:
         {
+            "paths": { ... },
             "components": {
                 "schemas": {...}
             }
@@ -347,11 +450,15 @@ class Bridge:
             [(model, "validation") for model in self.endpoint_models],
             ref_template="#/components/schemas/{model}",
         )
-        return {
+
+        result = {
+            "paths": self.openapi_paths,
             "components": {
                 "schemas": schemas.get('$defs'),
             }
         }
+
+        return result
 
     def ready(self) -> None:
         aiojobs_setup(self.app)
