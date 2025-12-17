@@ -122,7 +122,6 @@ class LesswebLoggerRotatingConfig(pydantic.BaseModel):
     when: str = 'd'
     interval: int = 1
     backup_count: int = 30
-    suffix: str = "%Y%m%d"
 
 
 class LesswebLoggerConfig(pydantic.BaseModel):
@@ -290,7 +289,6 @@ class Bridge:
                 interval=rotating_conf.interval,
                 backupCount=rotating_conf.backup_count
             )
-            file_handler.suffix = rotating_conf.suffix
             file_handler.setFormatter(formatter)
             root_logger.addHandler(file_handler)
         else:

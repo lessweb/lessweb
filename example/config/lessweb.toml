@@ -8,6 +8,8 @@ level = 'INFO'
 stream = 'file'
 name = 'umay-task-center'
 file = 'logs/umay-task-center.log'
+
+[lessweb.logger.rotating]
 when = 'd'
 interval = 1
 backup_count = 3
