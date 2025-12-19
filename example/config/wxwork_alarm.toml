@@ -1,2 +1,0 @@
-[wxwork_alarm]
-webhook_url = 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxxxxx-xxxx-xxxx-xxxx-xxxxxxxx'

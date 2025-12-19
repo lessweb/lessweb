@@ -1,0 +1,24 @@
+[jwt_gateway]
+jwt_salt = "your-secret-jwt-salt-change-in-production"
+expire_seconds = 86400  # 24小时
+redis_prefix = "jwt_gateway"  # Redis key 前缀，用于存储登录状态
+
+# 兜底策略（当请求路径未匹配到任何规则时的处理方式）
+# - "authenticated": 需要登录才能访问（默认）
+# - "deny": 拒绝访问
+# - "permit_all": 直接放行
+# default_policy = "authenticated"
+
+# URL角色映射规则
+# 注意：permitAll=true的规则必须放在最前面
+# pattern: 正则表达式匹配URL路径
+# roles: 允许访问的角色列表（可选，省略或为空表示只需登录即可）
+# permitAll: 是否允许所有人访问，包括未登录用户（不能与roles同时使用）
+
+[[jwt_gateway.url_role_mappings]]
+pattern = "^/login/"
+permitAll = true
+
+[[jwt_gateway.url_role_mappings]]
+pattern = "^/admin/"
+roles = ["ADMIN"]

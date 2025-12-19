@@ -1,0 +1,39 @@
+stages:
+  - build
+
+# 定义全局变量
+variables:
+  APP_NAME: my-saas-skeleton
+
+build:test:
+  stage: build
+  image: qorzj/python:3.11-torch
+  services:
+    - name: mysql:8.0
+      alias: mysql
+      command:
+        - "--character-set-server=utf8mb4"
+        - "--collation-server=utf8mb4_unicode_ci"
+        - "--sql_mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION"
+        - "--default-authentication-plugin=mysql_native_password"
+    - name: redis
+      alias: redis
+  variables:
+    MYSQL_ROOT_PASSWORD: passwd
+    MYSQL_DATABASE: test_db
+    ENV: testci
+  cache:
+    paths:
+      - venv/
+  script:
+    - ls -d venv || python -m venv venv
+    - source venv/bin/activate
+    - pip install -r requirements.txt
+    - pip install -e .[dev]
+    - python main.py pyway-migrate
+    - make test-all
+  tags:
+    - docker
+  only:
+    - master
+  when: manual

@@ -1,36 +1,28 @@
-FROM python:3.11-slim
+FROM qorzj/python:3.11-torch
 
-# Set timezone to Shanghai
-RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-RUN echo 'Asia/Shanghai' > /etc/timezone
+WORKDIR /project
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
+ADD requirements.txt .
 
-# 安装必要工具、替换源、安装包
-RUN which apt \
-    && { \
-         echo "deb http://mirrors.ustc.edu.cn/debian trixie main contrib non-free non-free-firmware"; \
-         echo "deb http://mirrors.ustc.edu.cn/debian trixie-updates main contrib non-free non-free-firmware"; \
-         echo "deb http://mirrors.ustc.edu.cn/debian-security trixie-security main contrib non-free non-free-firmware"; \
-       } > /etc/apt/sources.list \
-    \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates apt-transport-https gnupg dirmngr \
-    && apt-get install -y build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Install project dependencies with cache mount
+# This keeps pip cache even if requirements.txt changes
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
 
-WORKDIR /app
+# Create necessary directories
+RUN mkdir -p logs
 
-# Install dependencies first (better layer caching)
-COPY pyproject.toml .
-RUN pip install -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple -e .
+# Copy application files
+ADD .env.staging .
+ADD .env.production .
+ADD .pyway.conf .
+ADD config ./config
+ADD shared ./shared
+ADD src ./src
+ADD migration ./migration
+ADD openapi ./openapi
+ADD main.py .
+ADD Makefile .
 
-# Copy application code
-COPY . .
-
-# Expose port (configured in config/lessweb.toml)
+CMD python main.py
 EXPOSE 8080
-
-# Start the application with migration
-CMD ["sh", "-c", "make pyway-migrate && python main.py"]

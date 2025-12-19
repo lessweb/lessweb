@@ -1,0 +1,11 @@
+aiohttp>=3.9.1
+aiohttp-middlewares
+aiomysql
+bcrypt
+bullmq
+commondao>=1.4.2
+lessweb
+PyJWT
+pyway
+python-dotenv
+redis

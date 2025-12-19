@@ -1,1 +1,25 @@
-{}
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "My SaaS Skeleton API",
+    "description": "My SaaS application skeleton built with lessweb framework - providing admin authentication and system monitoring",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development"
+    }
+  ],
+  "paths": {},
+  "components": {
+    "schemas": {},
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

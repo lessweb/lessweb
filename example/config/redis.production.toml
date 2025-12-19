@@ -1,5 +1,5 @@
 [redis]
-host = '192.168.0.100'
+host = 'production-redis-host'
 port = 6379
+password = 'your-redis-password-here'
 db = 0
-password = 'password'

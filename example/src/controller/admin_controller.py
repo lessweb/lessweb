@@ -1,76 +1,108 @@
-import hashlib
 from typing import Annotated
 
+import bcrypt
 from commondao import Commondao
-from lessweb.annotation import Get, Post
 
-from shared.auth_gateway.auth_gateway import AuthGateway
-from src.entity.admin import (
-    Admin,
-    AdminChangePasswordRequest,
-    AdminForPassword,
-    AdminInsert,
-    AdminLoginRequest,
-    AdminLoginResponse,
-    AdminUpdate,
-)
+from lessweb.annotation import Get, Post
+from shared.jwt_gateway import JwtGateway
+from src.entity.admin import Admin, AdminInfoOutput, AdminLoginInput, AdminLoginOutput
 from src.service.auth_service import AuthRole, CurrentAdmin
 
 
-def _hash_password(password: str) -> str:
-    """对密码进行SHA256哈希"""
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+async def login_admin(
+        login_input: AdminLoginInput,
+        /,
+        dao: Commondao,
+        jwt_gateway: JwtGateway) -> Annotated[AdminLoginOutput, Post('/login/admin')]:
+    """
+    summary: 管理员登录
+    description: 管理员使用用户名和密码登录，验证成功后返回JWT token
+    tags:
+      - 认证管理
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminLoginInput'
+    responses:
+      200:
+        description: 登录成功，返回JWT token
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginOutput'
+      400:
+        description: 用户名或密码错误，或账号未激活
+    """
+    # 查询管理员账号
+    admin = await dao.select_one(
+        'from tbl_admin where username = :username limit 1',
+        Admin,
+        {'username': login_input.username}
+    )
 
+    # 验证账号是否存在
+    assert admin, 'Invalid username or password'
 
-async def login(login_data: AdminLoginRequest, /, auth_gateway: AuthGateway, dao: Commondao) -> Annotated[AdminLoginResponse, Post('/public/admin/login')]:
-    """管理员登录"""
-    hashed_password = _hash_password(login_data.password)
+    # 验证账号是否激活
+    assert admin.is_active, 'Account is not active'
 
-    # 查询管理员（使用AdminForPassword来验证密码）
-    admin_with_password = await dao.get_by_key(AdminForPassword, key={'username': login_data.username, 'password': hashed_password})
-    assert admin_with_password, "用户名或密码错误"
-
-    # 返回不包含密码的管理员信息
-    admin = await dao.get_by_id_or_fail(Admin, admin_with_password.id)
+    # 验证密码
+    assert bcrypt.checkpw(
+        login_input.password.encode('utf-8'),
+        admin.password_hash.encode('utf-8')
+    ), 'Invalid username or password'
 
     # 生成JWT token
-    token = auth_gateway.encrypt_jwt(str(admin.id), AuthRole.ADMIN)
+    token = jwt_gateway.encrypt_jwt(
+        user_id=str(admin.id),
+        subject=AuthRole.ADMIN
+    )
 
-    return AdminLoginResponse(admin=admin, token=token)
+    # 在Redis中设置登录状态
+    await jwt_gateway.login(
+        user_id=str(admin.id),
+        user_role=AuthRole.ADMIN
+    )
+
+    # 返回登录结果
+    return AdminLoginOutput(
+        token=token,
+        admin_id=admin.id,
+        username=admin.username
+    )
 
 
-async def get_current_admin(current_admin: CurrentAdmin) -> Annotated[Admin, Get('/admin/me')]:
-    """查询当前登录管理员信息"""
+async def get_admin_me(current_admin: CurrentAdmin) -> Annotated[AdminInfoOutput, Get('/admin/me')]:
+    """
+    summary: 获取当前登录管理员信息
+    description: 获取当前已登录的管理员的详细信息（不包含密码等敏感信息）
+    tags:
+      - 管理员管理
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: 成功返回管理员信息
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminInfoOutput'
+      401:
+        description: 未登录或token无效
+      403:
+        description: 无权限访问（非管理员角色）
+    """
+    # 通过 CurrentAdmin service 获取当前登录的管理员
     admin = await current_admin.get()
-    return admin
 
-
-async def change_password(password_data: AdminChangePasswordRequest, /, current_admin: CurrentAdmin, dao: Commondao) -> Annotated[dict, Post('/admin/me/change-password')]:
-    """修改当前管理员密码"""
-    admin_id = current_admin.id  # 这会自动验证是否为 admin 角色
-
-    # 验证旧密码
-    old_hashed = _hash_password(password_data.oldPassword)
-    admin = await dao.get_by_id_or_fail(AdminForPassword, admin_id)
-    assert admin.password == old_hashed, "旧密码错误"
-
-    # 更新密码
-    new_hashed = _hash_password(password_data.newPassword)
-    admin_update = AdminUpdate(id=admin_id, password=new_hashed)
-    await dao.update_by_id(admin_update)
-
-    return {'message': '密码修改成功'}
-
-
-async def init_admin(dao: Commondao) -> Annotated[Admin, Get('/public/admin/init')]:
-    """初始化管理员：创建一个密码为12345678的初始管理员"""
-    existing_admins = await dao.select_all("SELECT * FROM tbl_admin LIMIT 1", Admin)
-    assert not existing_admins, "系统中已存在管理员，无法初始化"
-
-    # 创建初始管理员
-    hashed_password = _hash_password("12345678")
-    initial_admin = AdminInsert(username="admin", password=hashed_password)
-    await dao.insert(initial_admin)
-    admin_id = dao.lastrowid()
-    admin = await dao.get_by_id_or_fail(Admin, admin_id)
-    return admin
+    # 返回管理员信息（不包含 password_hash）
+    return AdminInfoOutput(
+        id=admin.id,
+        username=admin.username,
+        email=admin.email,
+        is_active=admin.is_active,
+        create_time=admin.create_time,
+        update_time=admin.update_time
+    )

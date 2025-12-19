@@ -5,64 +5,61 @@ from commondao.annotation import TableId
 from pydantic import BaseModel
 
 
-# Entity for querying admins
 class Admin(BaseModel):
     """
-    管理员 - 用于查询（不包含密码）
-    """
-    id: Annotated[int, TableId('tbl_admin')]
-    truename: Optional[str]
-    username: str
-    createTime: datetime
-    updateTime: datetime
-
-
-# Entity for password verification
-class AdminForPassword(BaseModel):
-    """
-    管理员 - 用于密码验证
+    管理员实体 - 用于查询
     """
     id: Annotated[int, TableId('tbl_admin')]
     username: str
-    password: str
+    password_hash: str
+    email: Optional[str]
+    is_active: bool
+    create_time: datetime
+    update_time: datetime
 
 
-# Entity for inserting admins
 class AdminInsert(BaseModel):
     """
-    管理员 - 用于插入
+    管理员实体 - 用于插入
     """
     id: Annotated[Optional[int], TableId('tbl_admin')] = None  # Auto-increment
-    truename: Optional[str] = None
     username: str
-    password: str
+    password_hash: str
+    email: Optional[str] = None
+    is_active: bool = True
 
 
-# Entity for updating admins
 class AdminUpdate(BaseModel):
     """
-    管理员 - 用于更新
+    管理员实体 - 用于更新
     """
-    id: Annotated[int, TableId('tbl_admin')]
-    truename: Optional[str] = None
+    id: Annotated[Optional[int], TableId('tbl_admin')] = None
     username: Optional[str] = None
-    password: Optional[str] = None
+    password_hash: Optional[str] = None
+    email: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
-# DTOs for admin operations
-class AdminLoginRequest(BaseModel):
-    """管理员登录请求"""
+# DTO Models
+
+class AdminLoginInput(BaseModel):
+    """管理员登录请求DTO"""
     username: str
     password: str
 
 
-class AdminLoginResponse(BaseModel):
-    """管理员登录响应"""
-    admin: Admin
+class AdminLoginOutput(BaseModel):
+    """管理员登录响应DTO"""
     token: str
+    admin_id: int
+    username: str
 
 
-class AdminChangePasswordRequest(BaseModel):
-    """管理员修改密码请求"""
-    oldPassword: str
-    newPassword: str
+class AdminInfoOutput(BaseModel):
+    """管理员信息输出DTO（不包含敏感信息）"""
+    id: int
+    username: str
+    email: Optional[str]
+    is_active: bool
+    create_time: datetime
+    update_time: datetime

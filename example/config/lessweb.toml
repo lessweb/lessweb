@@ -6,8 +6,8 @@ enable_global_error_handling = false
 format = '%(asctime)s %(name)s %(filename)s:%(lineno)d %(levelname)s - %(message)s'
 level = 'INFO'
 stream = 'file'
-name = 'umay-task-center'
-file = 'logs/umay-task-center.log'
+name = 'my-saas-skeleton'
+file = 'logs/my-saas-skeleton.log'
 
 [lessweb.logger.rotating]
 when = 'd'

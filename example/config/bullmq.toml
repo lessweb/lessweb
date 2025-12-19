@@ -1,7 +1,7 @@
 [bullmq]
 queue = 'repeat_jobs'
-redis_db = 2
+redis_db = 1
 
 [[bullmq.repeat_jobs]]
-job_name = 'openai_ping_30min'
-every = 1800000
+job_name = 'database_health_check_2h'
+every = 7200000
