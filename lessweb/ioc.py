@@ -299,7 +299,7 @@ def rest_error(
         **kwargs,
 ) -> HTTPError:
     return error(
-        body=TypeCast.dumps(data),
+        text=TypeCast.dumps(data).decode('utf-8'),
         headers=headers,
         content_type='application/json',
         **kwargs,
