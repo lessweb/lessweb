@@ -24,7 +24,6 @@ from aiohttp.web import (
     run_app,
 )
 from aiojobs.aiohttp import setup as aiojobs_setup
-from dotenv import find_dotenv, load_dotenv
 from pydantic.json_schema import models_json_schema
 
 from .ioc import (
@@ -217,12 +216,6 @@ class Bridge:
         self.openapi_paths = {}
 
     def _load_config(self) -> LesswebBootstrapConfig:
-        if env := environ.get('ENV'):
-            env_file = find_dotenv(f'.env.{env}')
-            assert load_dotenv(
-                env_file, override=True), f'load dotenv file failed: {env_file}'
-        else:
-            load_dotenv(override=True)
         self.config = self._load_config_with_env()
         self.app[APP_CONFIG_KEY] = self.config
         return load_module_config(self.app, 'lessweb', LesswebBootstrapConfig)
