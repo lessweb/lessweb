@@ -6,25 +6,24 @@ import sys
 from pathlib import Path
 
 from aiohttp_middlewares.cors import cors_middleware
-
-from lessweb import Bridge
+from dotenv import find_dotenv, load_dotenv
 from shared.error_middleware import error_middleware
 from shared.jwt_gateway import JwtGatewayMiddleware
 from shared.lessweb_commondao import MysqlConn, commondao_bean
 from shared.redis_plugin import redis_bean
 
+from lessweb import Bridge
+
 OPENAPI_FILE = Path('openapi/openapi.json')
 
 
-def update_openapi(components: dict) -> None:
-    """Update OpenAPI specification file with new components."""
-    with OPENAPI_FILE.open('r') as f:
-        openapi_json = json.load(f)
-
-    openapi_json.update(components)
-
-    with OPENAPI_FILE.open('w') as f:
-        json.dump(openapi_json, f, indent=2, ensure_ascii=False)
+def load_environ():
+    if env := os.environ.get('ENV'):
+        env_file = find_dotenv(f'.env.{env}')
+        assert load_dotenv(
+            env_file, override=True), f'load dotenv file failed: {env_file}'
+    else:
+        load_dotenv(override=True)
 
 
 def setup_bridge() -> Bridge:
@@ -46,6 +45,17 @@ def setup_bridge() -> Bridge:
     )
     bridge.scan('src')
     return bridge
+
+
+def update_openapi(components: dict) -> None:
+    """Update OpenAPI specification file with new components."""
+    with OPENAPI_FILE.open('r') as f:
+        openapi_json = json.load(f)
+
+    openapi_json.update(components)
+
+    with OPENAPI_FILE.open('w') as f:
+        json.dump(openapi_json, f, indent=2, ensure_ascii=False)
 
 
 def setup_pyway_env(bridge: Bridge) -> dict:

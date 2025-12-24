@@ -3,14 +3,15 @@ import time
 import bcrypt
 import pytest
 from commondao import connect
-
-from lessweb import Bridge
-from lessweb.ioc import APP_CONFIG_KEY
-from lessweb.utils import absolute_ref
+from main import load_environ
 from shared.error_middleware import error_middleware
 from shared.jwt_gateway import JwtGateway, JwtGatewayMiddleware
 from shared.lessweb_commondao import MysqlConn, commondao_bean
 from shared.redis_plugin import redis_bean
+
+from lessweb import Bridge
+from lessweb.ioc import APP_CONFIG_KEY
+from lessweb.utils import absolute_ref
 
 
 class TestAdminController:
@@ -19,6 +20,7 @@ class TestAdminController:
     @pytest.fixture
     async def app_client(self, aiohttp_client):
         """Create test app with real database connection"""
+        load_environ()
         # Create Bridge instance with real config
         bridge = Bridge('config')
         bridge.beans(commondao_bean, redis_bean)
