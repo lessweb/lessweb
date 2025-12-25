@@ -1,4 +1,4 @@
-FROM qorzj/python:3.11-torch
+FROM qorzj/python:3.12-build
 
 WORKDIR /project
 
