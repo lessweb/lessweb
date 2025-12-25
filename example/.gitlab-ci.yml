@@ -7,7 +7,7 @@ variables:
 
 build:test:
   stage: build
-  image: qorzj/python:3.11-torch
+  image: qorzj/python:3.12-build
   services:
     - name: mysql:8.0
       alias: mysql
@@ -28,6 +28,7 @@ build:test:
   script:
     - ls -d venv || python -m venv venv
     - source venv/bin/activate
+    - python -m ensurepip
     - pip install -r requirements.txt
     - pip install -e .[dev]
     - python main.py pyway-migrate
